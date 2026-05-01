@@ -33,11 +33,22 @@
 #define SAMPLE_RATIO            (20.0f)     /* 分压比: Vout:Vadc = 20:1  */
 #define SAMPLE_BIAS             (1.65f)     /* 偏置电压 1.65V            */
 
+/* Vin采样参数（如果硬件支持，需配置ADC第二通道） */
+#define VIN_SAMPLE_RATIO        (10.0f)     /* Vin分压比，根据实际电路调整 */
+#define VIN_SAMPLE_BIAS         (0.0f)      /* Vin偏置电压               */
+#define VIN_DEFAULT             (5.0f)      /* 默认输入电压（无采样时）   */
+
+/* ADC滤波系数 */
+#define ADC_FILTER_ALPHA        (0.2f)      /* 一阶低通滤波系数 0.2      */
+
 /* ---------- PI 控制器参数 ---------- */
 #define PI_KP                   (0.005f)
 #define PI_KI                   (0.0002f)
 #define PI_INTEGRAL_MAX         (0.5f)
 #define PI_INTEGRAL_MIN        (-0.5f)
+
+/* 前馈控制开关 */
+#define ENABLE_FEEDFORWARD      (1)         /* 1=启用前馈, 0=禁用        */
 
 /* ---------- 目标电压范围 ---------- */
 #define VOUT_TARGET_DEFAULT     (12.0f)     /* 默认目标 12V              */
@@ -59,8 +70,11 @@ typedef struct {
 typedef struct {
     float v_target;         /* 目标输出电压 (V)   */
     float v_out;            /* 实测输出电压 (V)   */
+    float v_out_raw;        /* 未滤波的输出电压   */
+    float v_in;             /* 输入电压 (V)       */
     float duty;             /* 当前占空比 0.0~1.0 */
     uint32_t adc_raw;       /* ADC原始值           */
+    uint32_t adc_vin_raw;   /* Vin ADC原始值      */
     PI_Controller_t pi;
 } Boost_t;
 

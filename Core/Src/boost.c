@@ -13,10 +13,13 @@
 
 /* ---------- Global instance ---------- */
 Boost_t boost = {
-    .v_target = VOUT_TARGET_DEFAULT,
-    .v_out    = 0.0f,
-    .duty     = 0.0f,
-    .adc_raw  = 0,
+    .v_target     = VOUT_TARGET_DEFAULT,
+    .v_out        = 0.0f,
+    .v_out_raw    = 0.0f,
+    .v_in         = VIN_DEFAULT,
+    .duty         = 0.0f,
+    .adc_raw      = 0,
+    .adc_vin_raw  = 0,
     .pi = {
         .kp           = PI_KP,
         .ki           = PI_KI,
@@ -39,6 +42,25 @@ static float ADC_ToVout(uint32_t raw)
     float vout = (vadc - SAMPLE_BIAS) * SAMPLE_RATIO;
     if (vout < 0.0f) vout = 0.0f;
     return vout;
+}
+
+/* Convert ADC sample to input voltage. */
+static float ADC_ToVin(uint32_t raw)
+{
+    float vadc = (float)raw * ADC_VREF / ADC_RESOLUTION;
+    float vin = (vadc - VIN_SAMPLE_BIAS) * VIN_SAMPLE_RATIO;
+    if (vin < 0.0f) vin = 0.0f;
+    return vin;
+}
+
+/* Calculate feedforward duty based on ideal Boost equation: D = 1 - Vin/Vout */
+static float Calc_Feedforward(float v_in, float v_target)
+{
+    if (v_target <= v_in) return BOOST_DUTY_MIN;
+    float duty_ff = 1.0f - v_in / v_target;
+    if (duty_ff > BOOST_DUTY_MAX) duty_ff = BOOST_DUTY_MAX;
+    if (duty_ff < BOOST_DUTY_MIN) duty_ff = BOOST_DUTY_MIN;
+    return duty_ff;
 }
 
 /* Set TIM1 CH1 duty. */
@@ -79,35 +101,61 @@ void Boost_SetTarget(float v_target)
 
 void Boost_ControlLoop(void)
 {
-    /* 1. ADC sampling */
+    /* 1. ADC sampling - Vout */
     HAL_ADC_PollForConversion(&hadc1, 1);
     boost.adc_raw = HAL_ADC_GetValue(&hadc1);
-    boost.v_out = ADC_ToVout(boost.adc_raw);
+    boost.v_out_raw = ADC_ToVout(boost.adc_raw);
+
+    /* ADC一阶低通滤波，减少开关纹波干扰 */
+    boost.v_out = (1.0f - ADC_FILTER_ALPHA) * boost.v_out
+                + ADC_FILTER_ALPHA * boost.v_out_raw;
+
+    /* TODO: 如果硬件支持Vin采样，在此处读取并更新boost.v_in
+     * 示例代码（需配置ADC多通道）：
+     * HAL_ADC_PollForConversion(&hadc1, 1);
+     * boost.adc_vin_raw = HAL_ADC_GetValue(&hadc1);
+     * boost.v_in = ADC_ToVin(boost.adc_vin_raw);
+     */
+
     HAL_ADC_Start(&hadc1);
 
     /* 2. Error */
     float error = boost.v_target - boost.v_out;
 
-    /* 3. Pure incremental PI:
-     *      du(k) = Kp * [e(k) - e(k-1)] + Ki * e(k)
-     *      u(k)  = u(k-1) + du(k)
-     *
-     * No separate integral accumulator is used here.  The "integral" effect
-     * is naturally accumulated in the output duty itself.
+#if ENABLE_FEEDFORWARD
+    /* 3. 前馈 + 增量式PI控制
+     *    duty_ff = 1 - Vin/Vout (理想Boost占空比)
+     *    du(k) = Kp * [e(k) - e(k-1)] + Ki * e(k)
+     *    duty(k) = duty_ff + du(k)
+     */
+    float duty_ff = Calc_Feedforward(boost.v_in, boost.v_target);
+    float delta = boost.pi.kp * (error - boost_pi_error_last)
+                + boost.pi.ki * error;
+    float new_duty = duty_ff + delta;
+#else
+    /* 3. 纯增量式PI (无前馈)
+     *    du(k) = Kp * [e(k) - e(k-1)] + Ki * e(k)
+     *    u(k)  = u(k-1) + du(k)
      */
     float delta = boost.pi.kp * (error - boost_pi_error_last)
                 + boost.pi.ki * error;
     float new_duty = boost.duty + delta;
+#endif
 
-    /* 4. Limit output and update PWM */
+    /* 4. 抗积分饱和：占空比饱和时，如果误差方向还在让输出继续饱和，
+     *    则回退本次的积分增量，避免积分项继续累积 */
+    if ((new_duty > BOOST_DUTY_MAX && error > 0.0f) ||
+        (new_duty < BOOST_DUTY_MIN && error < 0.0f)) {
+        /* 饱和且误差方向不利 → 冻结积分，回退Ki项 */
+        new_duty -= boost.pi.ki * error;
+    }
+
+    /* 5. Limit output and update PWM */
     PWM_SetDuty(new_duty);
 
-    /* 5. Save state for next incremental PI step.
-     * Keep legacy fields consistent for debugging/UI, but they are not used
-     * as a positional PI integral any more.
-     */
+    /* 6. Save state for next incremental PI step */
     boost_pi_error_last = error;
-    boost.pi.integral = 0.0f;
+    boost.pi.integral = 0.0f;  /* 增量式PI不使用此字段，保留用于调试 */
     boost.pi.output = boost.duty;
 }
 
