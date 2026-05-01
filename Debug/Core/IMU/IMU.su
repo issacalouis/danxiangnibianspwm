@@ -1,0 +1,9 @@
+../Core/IMU/IMU.c:44:7:invSqrt1	32	static
+../Core/IMU/IMU.c:65:6:IMU_init	8	static
+../Core/IMU/IMU.c:105:6:calGyroVariance	56	static
+../Core/IMU/IMU.c:156:6:IMU_getValues	72	static
+../Core/IMU/IMU.c:209:6:IMU_AHRSupdate	136	static
+../Core/IMU/IMU.c:337:6:IMU_getQ	24	static
+../Core/IMU/IMU.c:358:6:IMU_getYawPitchRoll	72	static
+../Core/IMU/IMU.c:369:7:IMU_TT_getgyro	16	static
+../Core/IMU/IMU.c:380:6:MPU6050_InitAng_Offset	4	static

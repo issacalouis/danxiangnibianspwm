@@ -1,0 +1,7 @@
+../Core/Src/read_aux_data_mode.c:42:5:si_print_error_if_any	10
+../Core/Src/read_aux_data_mode.c:80:12:icm45686_read_regs	2
+../Core/Src/read_aux_data_mode.c:101:16:io_write_reg	1
+../Core/Src/read_aux_data_mode.c:117:12:icm45686_write_regs	3
+../Core/Src/read_aux_data_mode.c:131:6:delay_us	2
+../Core/Src/read_aux_data_mode.c:141:5:setup_imu	19
+../Core/Src/read_aux_data_mode.c:260:5:bsp_IcmGetRawData	2

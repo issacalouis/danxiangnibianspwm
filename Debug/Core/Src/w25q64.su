@@ -1,0 +1,6 @@
+../Core/Src/w25q64.c:14:10:W25Q64_readID	16	static
+../Core/Src/w25q64.c:33:6:W25Q64_write_enable	8	static
+../Core/Src/w25q64.c:42:6:W25Q64_wait_busy	16	static
+../Core/Src/w25q64.c:57:6:W25Q64_erase_sector	16	static
+../Core/Src/w25q64.c:74:6:W25Q64_write	32	static
+../Core/Src/w25q64.c:98:6:W25Q64_read	40	static

@@ -1,0 +1,9 @@
+../Core/Src/boost.c:31:14:ADC_ToVout	2
+../Core/Src/boost.c:40:13:PWM_SetDuty	3
+../Core/Src/boost.c:50:6:Boost_Init	1
+../Core/Src/boost.c:62:6:Boost_SetTarget	3
+../Core/Src/boost.c:73:6:Boost_ControlLoop	3
+../Core/Src/boost.c:99:6:Boost_KeyScan	4
+../Core/Src/boost.c:116:7:Boost_GetVout	1
+../Core/Src/boost.c:117:7:Boost_GetDuty	1
+../Core/Src/boost.c:118:7:Boost_GetTarget	1

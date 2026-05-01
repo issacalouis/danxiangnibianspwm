@@ -1,0 +1,7 @@
+../Core/Src/gpio.c:43:6:MX_GPIO_Init	1
+../Core/Src/gpio.c:143:6:HAL_GPIO_EXTI_Callback	2
+../Core/Src/gpio.c:153:6:for_delay_nop	2
+../Core/Src/gpio.c:164:6:handle_bit_high	1
+../Core/Src/gpio.c:172:6:handle_bit_low	1
+../Core/Src/gpio.c:180:6:process_rgb_bits	3
+../Core/Src/gpio.c:203:9:get_keyboard_value	16
