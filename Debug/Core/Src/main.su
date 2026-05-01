@@ -1,5 +1,6 @@
 ../Core/Src/main.c:63:9:MX_USER_Init	8	static
 ../Core/Src/main.c:74:10:MX_USER_Loop	24	static
-../Core/Src/main.c:119:5:main	8	static
-../Core/Src/main.c:186:6:SystemClock_Config	88	static
-../Core/Src/main.c:235:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:100:17:MX_ADC1_DisplayLoop	16	static
+../Core/Src/main.c:135:5:main	8	static
+../Core/Src/main.c:203:6:SystemClock_Config	88	static
+../Core/Src/main.c:252:6:Error_Handler	4	static,ignoring_inline_asm

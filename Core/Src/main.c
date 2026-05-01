@@ -96,6 +96,22 @@ void SystemClock_Config(void);
         );
     }
   }
+
+    static void MX_ADC1_DisplayLoop(void)
+  {
+    static uint32_t last_adc_disp_tick = 0;
+    uint32_t now = HAL_GetTick();
+
+    /* Refresh ADC1 raw value on OLED every 100ms */
+    if (now - last_adc_disp_tick >= 100U) {
+        last_adc_disp_tick = now;
+
+        OLED_ShowString(0, 48, "                ", 16);
+        OLED_ShowString(0, 48, "ADC1:", 16);
+        OLED_ShowInt(40, 48, (int32_t)boost.adc_raw, 16);
+        OLED_Refresh();
+    }
+  }
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -172,6 +188,7 @@ int main(void)
   
     /* USER CODE BEGIN 3 */
     MX_USER_Loop();
+ //   MX_ADC1_DisplayLoop();
   
   }
 
