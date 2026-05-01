@@ -39,6 +39,7 @@ void MX_TIM1_Init(void)
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_OC_InitTypeDef sConfigOCTrigger = {0};
   TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
   /* USER CODE BEGIN TIM1_Init 1 */
@@ -78,6 +79,17 @@ void MX_TIM1_Init(void)
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOCTrigger.OCMode = TIM_OCMODE_PWM1;
+  sConfigOCTrigger.Pulse = (htim1.Init.Period + 1) / 2;
+  sConfigOCTrigger.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOCTrigger.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOCTrigger.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOCTrigger.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOCTrigger.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOCTrigger, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
   }

@@ -36,7 +36,7 @@
 /* Vin采样参数（如果硬件支持，需配置ADC第二通道） */
 #define VIN_SAMPLE_RATIO        (10.0f)     /* Vin分压比，根据实际电路调整 */
 #define VIN_SAMPLE_BIAS         (0.0f)      /* Vin偏置电压               */
-#define VIN_DEFAULT             (5.0f)      /* 默认输入电压（无采样时）   */
+#define VIN_DEFAULT             (21.0f)      /* 默认输入电压（无采样时）   */
 
 /* ADC滤波系数 */
 #define ADC_FILTER_ALPHA        (0.2f)      /* 一阶低通滤波系数 0.2      */

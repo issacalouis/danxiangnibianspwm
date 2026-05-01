@@ -72,18 +72,40 @@ static void PWM_SetDuty(float duty)
     boost.duty = duty;
     uint32_t ccr = (uint32_t)(duty * (float)(BOOST_PWM_ARR + 1));
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr);
+
+    /* TIM1_CH2 is used as ADC1 trigger only (no GPIO output).
+     * Put the ADC trigger at the middle of the PWM off-time:
+     *   trigger = CCR1 + (ARR + 1 - CCR1) / 2
+     * This keeps the sample away from the CH1 switching edge while duty changes.
+     */
+    uint32_t adc_trigger_ccr = ccr + ((BOOST_PWM_ARR + 1U - ccr) / 2U);
+    if (adc_trigger_ccr > BOOST_PWM_ARR) {
+        adc_trigger_ccr = BOOST_PWM_ARR;
+    }
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, adc_trigger_ccr);
 }
 
 void Boost_Init(void)
 {
-    /* Start TIM1 CH1 PWM (PE9), and complementary CH1N (PA7). */
-    HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-    HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
-
     PWM_SetDuty(BOOST_DUTY_MIN);
 
-    /* Start ADC in polling mode. */
-    HAL_ADC_Start(&hadc1);
+    /* Start ADC1 in interrupt mode. Conversions are triggered by TIM1_CC2. */
+    if (HAL_ADC_Start_IT(&hadc1) != HAL_OK) {
+        Error_Handler();
+    }
+
+    /* Start TIM1 CH1 PWM (PE9), and complementary CH1N (PA7). */
+    if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) {
+        Error_Handler();
+    }
+
+    /* Start TIM1 CH2 as the ADC trigger source, no GPIO is configured for CH2. */
+    if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) {
+        Error_Handler();
+    }
 }
 
 void Boost_SetTarget(float v_target)
@@ -101,9 +123,10 @@ void Boost_SetTarget(float v_target)
 
 void Boost_ControlLoop(void)
 {
-    /* 1. ADC sampling - Vout */
-    HAL_ADC_PollForConversion(&hadc1, 1);
-    boost.adc_raw = HAL_ADC_GetValue(&hadc1);
+    /* 1. ADC sampling - Vout
+     * ADC1 raw value is updated by TIM1_CC2-triggered conversion complete IRQ.
+     * Control loop only consumes the latest sampled value here.
+     */
     boost.v_out_raw = ADC_ToVout(boost.adc_raw);
 
     /* ADC一阶低通滤波，减少开关纹波干扰 */
@@ -116,8 +139,6 @@ void Boost_ControlLoop(void)
      * boost.adc_vin_raw = HAL_ADC_GetValue(&hadc1);
      * boost.v_in = ADC_ToVin(boost.adc_vin_raw);
      */
-
-    HAL_ADC_Start(&hadc1);
 
     /* 2. Error */
     float error = boost.v_target - boost.v_out;
@@ -179,3 +200,10 @@ void Boost_KeyScan(void)
 float Boost_GetVout(void)   { return boost.v_out;    }
 float Boost_GetDuty(void)   { return boost.duty;     }
 float Boost_GetTarget(void) { return boost.v_target; }
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+    if (hadc->Instance == ADC1) {
+        boost.adc_raw = HAL_ADC_GetValue(hadc);
+    }
+}
