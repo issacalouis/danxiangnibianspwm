@@ -27,6 +27,11 @@ Boost_t boost = {
     },
 };
 
+/* Incremental PI state: last control error.
+ * Keep it file-local so Boost_ControlLoop() interface stays unchanged.
+ */
+static float boost_pi_error_last = 0.0f;
+
 /* Convert ADC sample to actual output voltage. */
 static float ADC_ToVout(uint32_t raw)
 {
@@ -66,8 +71,10 @@ void Boost_SetTarget(float v_target)
 
     boost.v_target = v_target;
 
-    /* Reset integral when target changes to avoid windup. */
+    /* Reset PI internal state when target changes to avoid stale error history. */
     boost.pi.integral = 0.0f;
+    boost.pi.output = boost.duty;
+    boost_pi_error_last = 0.0f;
 }
 
 void Boost_ControlLoop(void)
@@ -81,19 +88,27 @@ void Boost_ControlLoop(void)
     /* 2. Error */
     float error = boost.v_target - boost.v_out;
 
-    /* 3. Integral with limit */
-    boost.pi.integral += boost.pi.ki * error;
-    if (boost.pi.integral > boost.pi.integral_max)
-        boost.pi.integral = boost.pi.integral_max;
-    if (boost.pi.integral < boost.pi.integral_min)
-        boost.pi.integral = boost.pi.integral_min;
-
-    /* 4. PI output, added to current duty */
-    float delta = boost.pi.kp * error + boost.pi.integral;
+    /* 3. Pure incremental PI:
+     *      du(k) = Kp * [e(k) - e(k-1)] + Ki * e(k)
+     *      u(k)  = u(k-1) + du(k)
+     *
+     * No separate integral accumulator is used here.  The "integral" effect
+     * is naturally accumulated in the output duty itself.
+     */
+    float delta = boost.pi.kp * (error - boost_pi_error_last)
+                + boost.pi.ki * error;
     float new_duty = boost.duty + delta;
 
-    /* 5. Limit output and update PWM */
+    /* 4. Limit output and update PWM */
     PWM_SetDuty(new_duty);
+
+    /* 5. Save state for next incremental PI step.
+     * Keep legacy fields consistent for debugging/UI, but they are not used
+     * as a positional PI integral any more.
+     */
+    boost_pi_error_last = error;
+    boost.pi.integral = 0.0f;
+    boost.pi.output = boost.duty;
 }
 
 void Boost_KeyScan(void)
