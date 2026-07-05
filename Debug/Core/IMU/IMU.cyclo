@@ -5,5 +5,5 @@
 ../Core/IMU/IMU.c:209:6:IMU_AHRSupdate	5
 ../Core/IMU/IMU.c:335:6:IMU_getQ	1
 ../Core/IMU/IMU.c:356:6:IMU_getYawPitchRoll	1
-../Core/IMU/IMU.c:367:7:IMU_TT_getgyro	1
-../Core/IMU/IMU.c:378:6:MPU6050_InitAng_Offset	1
+../Core/IMU/IMU.c:366:7:IMU_TT_getgyro	1
+../Core/IMU/IMU.c:377:6:MPU6050_InitAng_Offset	1

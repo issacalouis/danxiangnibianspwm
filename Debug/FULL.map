@@ -565,13 +565,13 @@ Discarded input sections
  .text.IMU_getQ
                 0x00000000      0x148 ./Core/IMU/IMU.o
  .text.IMU_getYawPitchRoll
-                0x00000000      0x21c ./Core/IMU/IMU.o
+                0x00000000      0x20c ./Core/IMU/IMU.o
  .text.IMU_TT_getgyro
                 0x00000000       0x5c ./Core/IMU/IMU.o
  .text.MPU6050_InitAng_Offset
                 0x00000000        0xe ./Core/IMU/IMU.o
- .debug_info    0x00000000      0xd56 ./Core/IMU/IMU.o
- .debug_abbrev  0x00000000      0x317 ./Core/IMU/IMU.o
+ .debug_info    0x00000000      0xd2c ./Core/IMU/IMU.o
+ .debug_abbrev  0x00000000      0x316 ./Core/IMU/IMU.o
  .debug_aranges
                 0x00000000       0x60 ./Core/IMU/IMU.o
  .debug_rnglists
@@ -648,7 +648,7 @@ Discarded input sections
  .debug_macro   0x00000000       0x16 ./Core/IMU/IMU.o
  .debug_macro   0x00000000       0x3c ./Core/IMU/IMU.o
  .debug_macro   0x00000000       0x20 ./Core/IMU/IMU.o
- .debug_line    0x00000000     0x103c ./Core/IMU/IMU.o
+ .debug_line    0x00000000     0x1033 ./Core/IMU/IMU.o
  .debug_str     0x00000000    0xda9ce ./Core/IMU/IMU.o
  .comment       0x00000000       0x44 ./Core/IMU/IMU.o
  .debug_frame   0x00000000      0x16c ./Core/IMU/IMU.o

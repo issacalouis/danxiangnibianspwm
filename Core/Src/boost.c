@@ -40,6 +40,9 @@ Boost_t boost = {
     },
 };
 
+static volatile uint8_t adc2_busy = 0U;
+static volatile uint8_t adc2_rank = 0U;
+
 static float clampf(float value, float min_value, float max_value)
 {
     if (value > max_value) return max_value;
@@ -97,26 +100,23 @@ static void inverter_shutdown(void)
     pi_reset(&boost.i_pi);
 }
 
-static void adc2_sample_currents(void)
+static void adc2_request_current_sample(void)
 {
-    if (HAL_ADC_Start(&hadc2) != HAL_OK) {
+    if (adc2_busy != 0U) {
         return;
     }
 
-    if (HAL_ADC_PollForConversion(&hadc2, 1U) == HAL_OK) {
-        boost.adc_iout_raw = HAL_ADC_GetValue(&hadc2);
+    adc2_rank = 0U;
+    adc2_busy = 1U;
+    if (HAL_ADC_Start_IT(&hadc2) != HAL_OK) {
+        adc2_busy = 0U;
     }
-
-    if (HAL_ADC_PollForConversion(&hadc2, 1U) == HAL_OK) {
-        boost.adc_iin_raw = HAL_ADC_GetValue(&hadc2);
-    }
-
-    HAL_ADC_Stop(&hadc2);
 }
 
 void Boost_Init(void)
 {
     inverter_shutdown();
+    CLEAR_BIT(hadc2.Instance->CR1, ADC_CR1_DISCEN);
 
     if (HAL_ADC_Start_IT(&hadc1) != HAL_OK) {
         Error_Handler();
@@ -165,7 +165,7 @@ void Boost_ClearFault(void)
 
 void Boost_ControlLoop(void)
 {
-    adc2_sample_currents();
+    adc2_request_current_sample();
 
     boost.v_out_raw = adc_to_voltage(boost.adc_vout_raw);
     boost.i_out_raw = adc_to_current(boost.adc_iout_raw);
@@ -247,6 +247,17 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
     if (hadc->Instance == ADC1) {
         boost.adc_vout_raw = HAL_ADC_GetValue(hadc);
+    } else if (hadc->Instance == ADC2) {
+        uint32_t raw = HAL_ADC_GetValue(hadc);
+
+        if (adc2_rank == 0U) {
+            boost.adc_iout_raw = raw;
+            adc2_rank = 1U;
+        } else {
+            boost.adc_iin_raw = raw;
+            adc2_busy = 0U;
+            (void)HAL_ADC_Stop_IT(&hadc2);
+        }
     }
 }
 

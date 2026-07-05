@@ -63,24 +63,24 @@ typedef enum {
 } Boost_EditMode_t;
 
 typedef struct {
-    float v_target_rms;
-    float i_limit;
+    volatile float v_target_rms;
+    volatile float i_limit;
     float iin_oc_limit;
-    float v_out;
+    volatile float v_out;
     float v_out_raw;
-    float i_out;
+    volatile float i_out;
     float i_out_raw;
-    float i_in;
+    volatile float i_in;
     float i_in_raw;
     float phase;
-    float modulation;
-    float duty_a;
-    float duty_b;
-    uint8_t fault_oc;
-    Boost_EditMode_t edit_mode;
-    uint32_t adc_vout_raw;
-    uint32_t adc_iout_raw;
-    uint32_t adc_iin_raw;
+    volatile float modulation;
+    volatile float duty_a;
+    volatile float duty_b;
+    volatile uint8_t fault_oc;
+    volatile Boost_EditMode_t edit_mode;
+    volatile uint32_t adc_vout_raw;
+    volatile uint32_t adc_iout_raw;
+    volatile uint32_t adc_iin_raw;
     PI_Controller_t v_pi;
     PI_Controller_t i_pi;
 } Boost_t;
