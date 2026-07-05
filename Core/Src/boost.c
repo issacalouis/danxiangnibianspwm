@@ -6,7 +6,6 @@
 Boost_t boost = {
     .v_target_rms = VAC_TARGET_DEFAULT,
     .i_limit = IOUT_LIMIT_DEFAULT,
-    .iin_oc_limit = IIN_OC_LIMIT_DEFAULT,
     .v_out = 0.0f,
     .v_out_raw = 0.0f,
     .i_out = 0.0f,
@@ -17,7 +16,6 @@ Boost_t boost = {
     .modulation = 0.0f,
     .duty_a = INV_DUTY_CENTER,
     .duty_b = INV_DUTY_CENTER,
-    .fault_oc = 0U,
     .edit_mode = BOOST_EDIT_VOLTAGE,
     .adc_vout_raw = 0U,
     .adc_iout_raw = 0U,
@@ -40,8 +38,6 @@ Boost_t boost = {
     },
 };
 
-static volatile uint8_t adc2_busy = 0U;
-static volatile uint8_t adc2_rank = 0U;
 
 static float clampf(float value, float min_value, float max_value)
 {
@@ -100,25 +96,16 @@ static void inverter_shutdown(void)
     pi_reset(&boost.i_pi);
 }
 
-static void adc2_request_current_sample(void)
-{
-    if (adc2_busy != 0U) {
-        return;
-    }
-
-    adc2_rank = 0U;
-    adc2_busy = 1U;
-    if (HAL_ADC_Start_IT(&hadc2) != HAL_OK) {
-        adc2_busy = 0U;
-    }
-}
-
 void Boost_Init(void)
 {
     inverter_shutdown();
-    CLEAR_BIT(hadc2.Instance->CR1, ADC_CR1_DISCEN);
-
     if (HAL_ADC_Start_IT(&hadc1) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_ADC_Start_IT(&hadc2) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_ADC_Start_IT(&hadc3) != HAL_OK) {
         Error_Handler();
     }
 
@@ -157,16 +144,8 @@ void Boost_SetCurrentLimit(float i_limit)
     pi_reset(&boost.i_pi);
 }
 
-void Boost_ClearFault(void)
-{
-    boost.fault_oc = 0U;
-    inverter_shutdown();
-}
-
 void Boost_ControlLoop(void)
 {
-    adc2_request_current_sample();
-
     boost.v_out_raw = adc_to_voltage(boost.adc_vout_raw);
     boost.i_out_raw = adc_to_current(boost.adc_iout_raw);
     boost.i_in_raw = adc_to_current(boost.adc_iin_raw);
@@ -174,15 +153,6 @@ void Boost_ControlLoop(void)
     boost.v_out += ADC_FILTER_ALPHA * (boost.v_out_raw - boost.v_out);
     boost.i_out += ADC_FILTER_ALPHA * (boost.i_out_raw - boost.i_out);
     boost.i_in += ADC_FILTER_ALPHA * (boost.i_in_raw - boost.i_in);
-
-    if (fabsf(boost.i_in_raw) >= boost.iin_oc_limit) {
-        boost.fault_oc = 1U;
-    }
-
-    if (boost.fault_oc != 0U) {
-        inverter_shutdown();
-        return;
-    }
 
     boost.phase += INV_TWO_PI * INV_OUTPUT_FREQ_HZ / INV_CONTROL_RATE_HZ;
     if (boost.phase >= INV_TWO_PI) {
@@ -226,8 +196,6 @@ void Boost_KeyScan(void)
             } else {
                 Boost_SetCurrentLimit(boost.i_limit - IOUT_LIMIT_STEP);
             }
-        } else if (key == '#') {
-            Boost_ClearFault();
         }
     }
 
@@ -240,7 +208,6 @@ float Boost_GetIout(void) { return boost.i_out; }
 float Boost_GetIin(void) { return boost.i_in; }
 float Boost_GetCurrentLimit(void) { return boost.i_limit; }
 float Boost_GetDuty(void) { return boost.modulation; }
-uint8_t Boost_GetFault(void) { return boost.fault_oc; }
 Boost_EditMode_t Boost_GetEditMode(void) { return boost.edit_mode; }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
@@ -248,16 +215,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     if (hadc->Instance == ADC1) {
         boost.adc_vout_raw = HAL_ADC_GetValue(hadc);
     } else if (hadc->Instance == ADC2) {
-        uint32_t raw = HAL_ADC_GetValue(hadc);
-
-        if (adc2_rank == 0U) {
-            boost.adc_iout_raw = raw;
-            adc2_rank = 1U;
-        } else {
-            boost.adc_iin_raw = raw;
-            adc2_busy = 0U;
-            (void)HAL_ADC_Stop_IT(&hadc2);
-        }
+        boost.adc_iout_raw = HAL_ADC_GetValue(hadc);
+    } else if (hadc->Instance == ADC3) {
+        boost.adc_iin_raw = HAL_ADC_GetValue(hadc);
     }
 }
 

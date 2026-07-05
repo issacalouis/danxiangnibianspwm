@@ -263,14 +263,12 @@ void OLED_DrawRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t fill)
 /* ============================================================
  *  OLED_BoostUI  -  Inverter control interface
  * ============================================================ */
-void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t fault, uint8_t edit_mode)
+void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t edit_mode)
 {
     OLED_Clear();
 
     OLED_ShowString(0, 0, "INV CTRL", 16);
-    if (fault) {
-        OLED_ShowString(72, 0, "OC", 16);
-    } else if (edit_mode == 0U) {
+    if (edit_mode == 0U) {
         OLED_ShowString(72, 0, "SET V", 16);
     } else {
         OLED_ShowString(72, 0, "SET I", 16);

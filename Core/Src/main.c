@@ -91,7 +91,6 @@ void SystemClock_Config(void);
             Boost_GetIout(),
             Boost_GetIin(),
             Boost_GetDuty(),
-            Boost_GetFault(),
             (uint8_t)Boost_GetEditMode()
         );
     }

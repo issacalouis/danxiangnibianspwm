@@ -11,7 +11,7 @@
  * PWM bridge B : TIM8_CH2  -> PC7, TIM8_CH2N -> PB0
  * ADC output V : ADC1_CH5  -> PA5, V = (Vadc - 1.72) * 55.8
  * ADC output I : ADC2_CH14 -> PC4, I = (Vadc - 1.72) * 2.82
- * ADC input  I : ADC2_CH15 -> PC5, I = (Vadc - 1.72) * 2.82
+ * ADC input  I : ADC3_CH10 -> PC0, I = (Vadc - 1.72) * 2.82
  * ============================================================ */
 
 #define INV_PWM_ARR                 (8399U)
@@ -39,7 +39,6 @@
 #define IOUT_LIMIT_MIN              (0.2f)
 #define IOUT_LIMIT_MAX              (10.0f)
 #define IOUT_LIMIT_STEP             (0.2f)
-#define IIN_OC_LIMIT_DEFAULT        (2.5f)
 
 #define V_LOOP_KP                   (0.080f)
 #define V_LOOP_KI                   (0.0005f)
@@ -65,7 +64,6 @@ typedef enum {
 typedef struct {
     float v_target_rms;
     float i_limit;
-    float iin_oc_limit;
     float v_out;
     float v_out_raw;
     float i_out;
@@ -76,7 +74,6 @@ typedef struct {
     float modulation;
     float duty_a;
     float duty_b;
-    uint8_t fault_oc;
     Boost_EditMode_t edit_mode;
     uint32_t adc_vout_raw;
     uint32_t adc_iout_raw;
@@ -91,11 +88,11 @@ extern TIM_HandleTypeDef htim6;
 extern TIM_HandleTypeDef htim8;
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
+extern ADC_HandleTypeDef hadc3;
 
 void Boost_Init(void);
 void Boost_SetTarget(float v_target_rms);
 void Boost_SetCurrentLimit(float i_limit);
-void Boost_ClearFault(void);
 void Boost_ControlLoop(void);
 void Boost_KeyScan(void);
 float Boost_GetTarget(void);
@@ -104,7 +101,6 @@ float Boost_GetIout(void);
 float Boost_GetIin(void);
 float Boost_GetCurrentLimit(void);
 float Boost_GetDuty(void);
-uint8_t Boost_GetFault(void);
 Boost_EditMode_t Boost_GetEditMode(void);
 
 #endif /* __BOOST_H */
