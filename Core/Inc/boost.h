@@ -33,7 +33,7 @@
 #define VAC_TARGET_DEFAULT          (10.0f)
 #define VAC_TARGET_MIN              (0.0f)
 #define VAC_TARGET_MAX              (60.0f)
-#define VAC_TARGET_STEP             (1.0f)
+#define VAC_TARGET_STEP             (0.5f)
 
 #define IOUT_LIMIT_DEFAULT          (1.6f)
 #define IOUT_LIMIT_MIN              (0.2f)
@@ -63,24 +63,24 @@ typedef enum {
 } Boost_EditMode_t;
 
 typedef struct {
-    volatile float v_target_rms;
-    volatile float i_limit;
+    float v_target_rms;
+    float i_limit;
     float iin_oc_limit;
-    volatile float v_out;
+    float v_out;
     float v_out_raw;
-    volatile float i_out;
+    float i_out;
     float i_out_raw;
-    volatile float i_in;
+    float i_in;
     float i_in_raw;
     float phase;
-    volatile float modulation;
-    volatile float duty_a;
-    volatile float duty_b;
-    volatile uint8_t fault_oc;
-    volatile Boost_EditMode_t edit_mode;
-    volatile uint32_t adc_vout_raw;
-    volatile uint32_t adc_iout_raw;
-    volatile uint32_t adc_iin_raw;
+    float modulation;
+    float duty_a;
+    float duty_b;
+    uint8_t fault_oc;
+    Boost_EditMode_t edit_mode;
+    uint32_t adc_vout_raw;
+    uint32_t adc_iout_raw;
+    uint32_t adc_iin_raw;
     PI_Controller_t v_pi;
     PI_Controller_t i_pi;
 } Boost_t;

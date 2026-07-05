@@ -1,12 +1,12 @@
-../Core/Src/boost.c:43:14:clampf	3
-../Core/Src/boost.c:50:14:adc_to_voltage	1
-../Core/Src/boost.c:56:14:adc_to_current	1
-../Core/Src/boost.c:62:14:pi_step	1
-../Core/Src/boost.c:70:13:pi_reset	1
-../Core/Src/boost.c:76:13:pwm_write	1
-../Core/Src/boost.c:92:13:inverter_shutdown	1
-../Core/Src/boost.c:100:13:adc2_sample_currents	4
-../Core/Src/boost.c:117:6:Boost_Init	8
+../Core/Src/boost.c:46:14:clampf	3
+../Core/Src/boost.c:53:14:adc_to_voltage	1
+../Core/Src/boost.c:59:14:adc_to_current	1
+../Core/Src/boost.c:65:14:pi_step	1
+../Core/Src/boost.c:73:13:pi_reset	1
+../Core/Src/boost.c:79:13:pwm_write	1
+../Core/Src/boost.c:95:13:inverter_shutdown	1
+../Core/Src/boost.c:103:13:adc2_request_current_sample	3
+../Core/Src/boost.c:116:6:Boost_Init	8
 ../Core/Src/boost.c:148:6:Boost_SetTarget	1
 ../Core/Src/boost.c:154:6:Boost_SetCurrentLimit	1
 ../Core/Src/boost.c:160:6:Boost_ClearFault	1
@@ -20,4 +20,4 @@
 ../Core/Src/boost.c:242:7:Boost_GetDuty	1
 ../Core/Src/boost.c:243:9:Boost_GetFault	1
 ../Core/Src/boost.c:244:18:Boost_GetEditMode	1
-../Core/Src/boost.c:246:6:HAL_ADC_ConvCpltCallback	2
+../Core/Src/boost.c:246:6:HAL_ADC_ConvCpltCallback	4

@@ -1,12 +1,12 @@
-../Core/Src/boost.c:43:14:clampf	24	static
-../Core/Src/boost.c:50:14:adc_to_voltage	24	static
-../Core/Src/boost.c:56:14:adc_to_current	24	static
-../Core/Src/boost.c:62:14:pi_step	16	static
-../Core/Src/boost.c:70:13:pi_reset	16	static
-../Core/Src/boost.c:76:13:pwm_write	16	static
-../Core/Src/boost.c:92:13:inverter_shutdown	8	static
-../Core/Src/boost.c:100:13:adc2_sample_currents	8	static
-../Core/Src/boost.c:117:6:Boost_Init	8	static
+../Core/Src/boost.c:46:14:clampf	24	static
+../Core/Src/boost.c:53:14:adc_to_voltage	24	static
+../Core/Src/boost.c:59:14:adc_to_current	24	static
+../Core/Src/boost.c:65:14:pi_step	16	static
+../Core/Src/boost.c:73:13:pi_reset	16	static
+../Core/Src/boost.c:79:13:pwm_write	16	static
+../Core/Src/boost.c:95:13:inverter_shutdown	8	static
+../Core/Src/boost.c:103:13:adc2_request_current_sample	8	static
+../Core/Src/boost.c:116:6:Boost_Init	8	static
 ../Core/Src/boost.c:148:6:Boost_SetTarget	16	static
 ../Core/Src/boost.c:154:6:Boost_SetCurrentLimit	16	static
 ../Core/Src/boost.c:160:6:Boost_ClearFault	8	static
@@ -20,4 +20,4 @@
 ../Core/Src/boost.c:242:7:Boost_GetDuty	4	static
 ../Core/Src/boost.c:243:9:Boost_GetFault	4	static
 ../Core/Src/boost.c:244:18:Boost_GetEditMode	4	static
-../Core/Src/boost.c:246:6:HAL_ADC_ConvCpltCallback	16	static
+../Core/Src/boost.c:246:6:HAL_ADC_ConvCpltCallback	24	static
