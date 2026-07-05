@@ -68,8 +68,8 @@ void SystemClock_Config(void);
     OLED_Refresh();
 
     Boost_Init();
-    Boost_SetTarget(12.0f);
-    Boost_SetCurrentLimit(2.0f);
+    Boost_SetTarget(10.0f);
+    Boost_SetCurrentLimit(1.6f);
 }
     void MX_USER_Loop(void)
   {
@@ -260,5 +260,6 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
 
 

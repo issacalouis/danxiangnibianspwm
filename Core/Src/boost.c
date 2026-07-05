@@ -196,7 +196,7 @@ void Boost_ControlLoop(void)
 
     float i_ref = i_ref_amp;
     float modulation = pi_step(&boost.i_pi, i_ref - boost.i_out);
-    modulation = clampf(modulation, -0.90f, 0.90f);
+    modulation = clampf(modulation, -0.96f, 0.96f);
     boost.modulation = modulation;
 
     float duty_a = INV_DUTY_CENTER + 0.5f * modulation;
@@ -249,3 +249,4 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
         boost.adc_vout_raw = HAL_ADC_GetValue(hadc);
     }
 }
+

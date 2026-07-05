@@ -14,12 +14,12 @@
  * ADC input  I : ADC2_CH15 -> PC5, I = (Vadc - 1.72) * 2.82
  * ============================================================ */
 
-#define INV_PWM_ARR                 (1679U)
-#define INV_DUTY_MIN                (0.05f)
-#define INV_DUTY_MAX                (0.95f)
+#define INV_PWM_ARR                 (8399U)
+#define INV_DUTY_MIN                (0.02f)
+#define INV_DUTY_MAX                (0.98f)
 #define INV_DUTY_CENTER             (0.50f)
 
-#define INV_CONTROL_RATE_HZ         (2000.0f)
+#define INV_CONTROL_RATE_HZ         (20000.0f)
 #define INV_OUTPUT_FREQ_HZ          (50.0f)
 #define INV_TWO_PI                  (6.28318530718f)
 
@@ -30,21 +30,21 @@
 #define CURRENT_SAMPLE_RATIO        (2.82f)
 #define ADC_FILTER_ALPHA            (0.2f)
 
-#define VAC_TARGET_DEFAULT          (12.0f)
+#define VAC_TARGET_DEFAULT          (10.0f)
 #define VAC_TARGET_MIN              (0.0f)
 #define VAC_TARGET_MAX              (60.0f)
 #define VAC_TARGET_STEP             (1.0f)
 
-#define IOUT_LIMIT_DEFAULT          (2.0f)
+#define IOUT_LIMIT_DEFAULT          (1.6f)
 #define IOUT_LIMIT_MIN              (0.2f)
 #define IOUT_LIMIT_MAX              (10.0f)
 #define IOUT_LIMIT_STEP             (0.2f)
-#define IIN_OC_LIMIT_DEFAULT        (8.0f)
+#define IIN_OC_LIMIT_DEFAULT        (2.5f)
 
-#define V_LOOP_KP                   (0.020f)
-#define V_LOOP_KI                   (0.001f)
-#define I_LOOP_KP                   (0.030f)
-#define I_LOOP_KI                   (0.002f)
+#define V_LOOP_KP                   (0.080f)
+#define V_LOOP_KI                   (0.0005f)
+#define I_LOOP_KP                   (0.300f)
+#define I_LOOP_KI                   (0.0100f)
 #define PI_INTEGRAL_MAX             (1.0f)
 #define PI_INTEGRAL_MIN            (-1.0f)
 
@@ -108,3 +108,4 @@ uint8_t Boost_GetFault(void);
 Boost_EditMode_t Boost_GetEditMode(void);
 
 #endif /* __BOOST_H */
+
