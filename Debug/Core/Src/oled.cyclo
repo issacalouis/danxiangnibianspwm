@@ -6,8 +6,9 @@
 ../Core/Src/oled.c:169:6:OLED_DrawPoint	4
 ../Core/Src/oled.c:182:6:OLED_ShowChar	5
 ../Core/Src/oled.c:198:6:OLED_ShowString	3
-../Core/Src/oled.c:210:6:OLED_ShowFloat	3
-../Core/Src/oled.c:219:6:OLED_ShowInt	1
-../Core/Src/oled.c:229:6:OLED_DrawLine	9
-../Core/Src/oled.c:249:6:OLED_DrawRect	6
-../Core/Src/oled.c:266:6:OLED_BoostUI	3
+../Core/Src/oled.c:210:6:OLED_ShowFloat	4
+../Core/Src/oled.c:220:6:OLED_ShowInt	1
+../Core/Src/oled.c:230:6:OLED_DrawLine	9
+../Core/Src/oled.c:250:6:OLED_DrawRect	6
+../Core/Src/oled.c:267:6:OLED_BoostUI	4
+../Core/Src/oled.c:302:6:OLED_BoostCalUI	4

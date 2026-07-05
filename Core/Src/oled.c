@@ -212,6 +212,7 @@ void OLED_ShowFloat(uint8_t x, uint8_t y, float val, uint8_t decimals, uint8_t s
     char buf[16];
     if (decimals == 1)      snprintf(buf, sizeof(buf), "%.1f", (double)val);
     else if (decimals == 2) snprintf(buf, sizeof(buf), "%.2f", (double)val);
+    else if (decimals == 4) snprintf(buf, sizeof(buf), "%.4f", (double)val);
     else                    snprintf(buf, sizeof(buf), "%.0f", (double)val);
     OLED_ShowString(x, y, buf, size);
 }
@@ -263,11 +264,17 @@ void OLED_DrawRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t fill)
 /* ============================================================
  *  OLED_BoostUI  -  Inverter control interface
  * ============================================================ */
-void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t edit_mode)
+void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t edit_mode, uint8_t run_state)
 {
     OLED_Clear();
 
-    OLED_ShowString(0, 0, "INV CTRL", 16);
+    if (run_state == 2U) {
+        OLED_ShowString(0, 0, "RUN", 16);
+    } else if (run_state == 1U) {
+        OLED_ShowString(0, 0, "ARM", 16);
+    } else {
+        OLED_ShowString(0, 0, "STOP", 16);
+    }
     if (edit_mode == 0U) {
         OLED_ShowString(72, 0, "SET V", 16);
     } else {
@@ -289,6 +296,30 @@ void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float
     OLED_ShowString(72, 48, "M:", 16);
     OLED_ShowFloat(88, 48, modulation, 2, 16);
 
+    OLED_Refresh();
+}
+
+void OLED_BoostCalUI(uint8_t cal_mode, float bias, float value)
+{
+    OLED_Clear();
+
+    if (cal_mode == 1U) {
+        OLED_ShowString(0, 0, "CAL V", 16);
+    } else if (cal_mode == 2U) {
+        OLED_ShowString(0, 0, "CAL IO", 16);
+    } else if (cal_mode == 3U) {
+        OLED_ShowString(0, 0, "CAL II", 16);
+    } else {
+        OLED_ShowString(0, 0, "CAL", 16);
+    }
+
+    OLED_ShowString(0, 16, "BIAS:", 16);
+    OLED_ShowFloat(48, 16, bias, 4, 16);
+
+    OLED_ShowString(0, 32, "VAL:", 16);
+    OLED_ShowFloat(40, 32, value, 1, 16);
+
+    OLED_ShowString(0, 48, "1/2 ADJ", 16);
     OLED_Refresh();
 }
 

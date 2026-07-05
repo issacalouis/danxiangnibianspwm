@@ -5,39 +5,37 @@
 
 Boost_t boost = {
     .v_target_rms = VAC_TARGET_DEFAULT,
+    .v_target_active_rms = 0.0f,
     .i_limit = IOUT_LIMIT_DEFAULT,
+    .v_ref = 0.0f,
     .v_out = 0.0f,
     .v_out_raw = 0.0f,
     .i_out = 0.0f,
     .i_out_raw = 0.0f,
     .i_in = 0.0f,
     .i_in_raw = 0.0f,
+    .v_sample_bias = XTQ3_VOLTAGE_BIAS,
+    .iout_sample_bias = XTQ3_CURRENT_BIAS,
+    .iin_sample_bias = XTQ3_CURRENT_BIAS,
+    .outer_integrator = 0.0f,
+    .inner_integrator = 0.0f,
+    .outer_output = 0.0f,
+    .inner_error = 0.0f,
     .phase = 0.0f,
     .modulation = 0.0f,
+    .modulation_limit = 0.0f,
+    .modulation_peak = 0.0f,
+    .modulation_peak_work = 0.0f,
     .duty_a = INV_DUTY_CENTER,
     .duty_b = INV_DUTY_CENTER,
+    .arming_ticks = 0U,
     .edit_mode = BOOST_EDIT_VOLTAGE,
+    .run_state = BOOST_STATE_STOPPED,
+    .cal_mode = BOOST_CAL_NONE,
     .adc_vout_raw = 0U,
     .adc_iout_raw = 0U,
     .adc_iin_raw = 0U,
-    .v_pi = {
-        .kp = V_LOOP_KP,
-        .ki = V_LOOP_KI,
-        .integral = 0.0f,
-        .integral_max = PI_INTEGRAL_MAX,
-        .integral_min = PI_INTEGRAL_MIN,
-        .output = 0.0f,
-    },
-    .i_pi = {
-        .kp = I_LOOP_KP,
-        .ki = I_LOOP_KI,
-        .integral = 0.0f,
-        .integral_max = PI_INTEGRAL_MAX,
-        .integral_min = PI_INTEGRAL_MIN,
-        .output = 0.0f,
-    },
 };
-
 
 static float clampf(float value, float min_value, float max_value)
 {
@@ -46,34 +44,49 @@ static float clampf(float value, float min_value, float max_value)
     return value;
 }
 
+static float adc_raw_to_vadc(uint32_t raw)
+{
+    return (float)raw * ADC_VREF / ADC_RESOLUTION;
+}
+
 static float adc_to_voltage(uint32_t raw)
 {
-    float vadc = (float)raw * ADC_VREF / ADC_RESOLUTION;
-    return (vadc - SAMPLE_BIAS) * VOLTAGE_SAMPLE_RATIO;
+    return (adc_raw_to_vadc(raw) - boost.v_sample_bias) * XTQ3_VOLTAGE_GAIN;
 }
 
-static float adc_to_current(uint32_t raw)
+static float adc_to_current(uint32_t raw, float bias)
 {
-    float vadc = (float)raw * ADC_VREF / ADC_RESOLUTION;
-    return (vadc - SAMPLE_BIAS) * CURRENT_SAMPLE_RATIO;
+    return (adc_raw_to_vadc(raw) - bias) * XTQ3_CURRENT_GAIN;
 }
 
-static float pi_step(PI_Controller_t *pi, float error)
+static void reset_control_state(void)
 {
-    pi->integral += pi->ki * error;
-    pi->integral = clampf(pi->integral, pi->integral_min, pi->integral_max);
-    pi->output = pi->kp * error + pi->integral;
-    return pi->output;
+    boost.v_ref = 0.0f;
+    boost.outer_integrator = 0.0f;
+    boost.inner_integrator = 0.0f;
+    boost.outer_output = 0.0f;
+    boost.inner_error = 0.0f;
+    boost.phase = 0.0f;
+    boost.modulation = 0.0f;
+    boost.modulation_limit = 0.0f;
+    boost.modulation_peak = 0.0f;
+    boost.modulation_peak_work = 0.0f;
 }
 
-static void pi_reset(PI_Controller_t *pi)
+static float spwm_triangle_cut_duty(float modulation_ref)
 {
-    pi->integral = 0.0f;
-    pi->output = 0.0f;
+    modulation_ref = clampf(modulation_ref,
+                            -BOOST_MODULATION_MAX,
+                            BOOST_MODULATION_MAX);
+
+    return INV_DUTY_CENTER + 0.5f * modulation_ref;
 }
 
 static void pwm_write(float duty_a, float duty_b)
 {
+    uint32_t arr1 = __HAL_TIM_GET_AUTORELOAD(&htim1);
+    uint32_t arr8 = __HAL_TIM_GET_AUTORELOAD(&htim8);
+
     duty_a = clampf(duty_a, INV_DUTY_MIN, INV_DUTY_MAX);
     duty_b = clampf(duty_b, INV_DUTY_MIN, INV_DUTY_MAX);
 
@@ -81,24 +94,131 @@ static void pwm_write(float duty_a, float duty_b)
     boost.duty_b = duty_b;
 
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
-                          (uint32_t)(duty_a * (float)(INV_PWM_ARR + 1U)));
+                          (uint32_t)(duty_a * (float)(arr1 + 1U)));
     __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2,
-                          (uint32_t)(duty_b * (float)(INV_PWM_ARR + 1U)));
-
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (INV_PWM_ARR + 1U) / 2U);
+                          (uint32_t)(duty_b * (float)(arr8 + 1U)));
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (arr1 + 1U) / 2U);
 }
 
 static void inverter_shutdown(void)
 {
-    boost.modulation = 0.0f;
+    reset_control_state();
     pwm_write(INV_DUTY_CENTER, INV_DUTY_CENTER);
-    pi_reset(&boost.v_pi);
-    pi_reset(&boost.i_pi);
+}
+
+static void boost_enter_stop(void)
+{
+    boost.run_state = BOOST_STATE_STOPPED;
+    boost.v_target_active_rms = 0.0f;
+    boost.arming_ticks = 0U;
+    inverter_shutdown();
+}
+
+static void boost_enter_arming(void)
+{
+    boost.run_state = BOOST_STATE_ARMING;
+    boost.v_target_active_rms = 0.0f;
+    boost.arming_ticks = 0U;
+    inverter_shutdown();
+}
+
+static void boost_enter_run(void)
+{
+    boost.run_state = BOOST_STATE_RUNNING;
+    boost.v_target_active_rms = 0.0f;
+    boost.arming_ticks = 0U;
+    reset_control_state();
+}
+
+static void update_measurements(void)
+{
+    boost.v_out_raw = adc_to_voltage(boost.adc_vout_raw);
+    boost.i_out_raw = adc_to_current(boost.adc_iout_raw, boost.iout_sample_bias);
+    boost.i_in_raw = adc_to_current(boost.adc_iin_raw, boost.iin_sample_bias);
+
+    boost.v_out += ADC_FILTER_ALPHA * (boost.v_out_raw - boost.v_out);
+    boost.i_out += ADC_FILTER_ALPHA * (boost.i_out_raw - boost.i_out);
+    boost.i_in += ADC_FILTER_ALPHA * (boost.i_in_raw - boost.i_in);
+}
+
+static void update_soft_start(void)
+{
+    float step = BOOST_SOFT_START_V_PER_S * INV_CONTROL_TS;
+    float modulation_step = BOOST_MODULATION_SOFT_START_PER_S * INV_CONTROL_TS;
+
+    if (boost.v_target_active_rms < boost.v_target_rms) {
+        boost.v_target_active_rms += step;
+        if (boost.v_target_active_rms > boost.v_target_rms) {
+            boost.v_target_active_rms = boost.v_target_rms;
+        }
+    } else if (boost.v_target_active_rms > boost.v_target_rms) {
+        boost.v_target_active_rms -= step;
+        if (boost.v_target_active_rms < boost.v_target_rms) {
+            boost.v_target_active_rms = boost.v_target_rms;
+        }
+    }
+
+    if (boost.modulation_limit < BOOST_MODULATION_MAX) {
+        boost.modulation_limit += modulation_step;
+        if (boost.modulation_limit > BOOST_MODULATION_MAX) {
+            boost.modulation_limit = BOOST_MODULATION_MAX;
+        }
+    }
+}
+
+static uint8_t arming_samples_ok(void)
+{
+    return (fabsf(boost.v_out) <= BOOST_ARMING_V_MAX &&
+            fabsf(boost.i_out) <= BOOST_ARMING_I_MAX &&
+            fabsf(boost.i_in) <= BOOST_ARMING_I_MAX) ? 1U : 0U;
+}
+
+static void update_modulation_peak(float modulation, uint8_t phase_wrapped)
+{
+    float abs_m = fabsf(modulation);
+
+    if (abs_m > boost.modulation_peak_work) {
+        boost.modulation_peak_work = abs_m;
+    }
+
+    if (phase_wrapped) {
+        boost.modulation_peak = boost.modulation_peak_work;
+        boost.modulation_peak_work = 0.0f;
+    }
+}
+
+static void adjust_current_cal_bias(float delta)
+{
+    if (boost.run_state != BOOST_STATE_STOPPED) return;
+
+    if (boost.cal_mode == BOOST_CAL_VOLTAGE) {
+        boost.v_sample_bias = clampf(boost.v_sample_bias + delta, 0.0f, ADC_VREF);
+    } else if (boost.cal_mode == BOOST_CAL_IOUT) {
+        boost.iout_sample_bias = clampf(boost.iout_sample_bias + delta, 0.0f, ADC_VREF);
+    } else if (boost.cal_mode == BOOST_CAL_IIN) {
+        boost.iin_sample_bias = clampf(boost.iin_sample_bias + delta, 0.0f, ADC_VREF);
+    }
+}
+
+static void next_cal_mode(void)
+{
+    if (boost.run_state != BOOST_STATE_STOPPED) return;
+
+    if (boost.cal_mode == BOOST_CAL_NONE) {
+        boost.cal_mode = BOOST_CAL_VOLTAGE;
+    } else if (boost.cal_mode == BOOST_CAL_VOLTAGE) {
+        boost.cal_mode = BOOST_CAL_IOUT;
+    } else if (boost.cal_mode == BOOST_CAL_IOUT) {
+        boost.cal_mode = BOOST_CAL_IIN;
+    } else {
+        boost.cal_mode = BOOST_CAL_NONE;
+    }
 }
 
 void Boost_Init(void)
 {
-    inverter_shutdown();
+    boost_enter_stop();
+
     if (HAL_ADC_Start_IT(&hadc1) != HAL_OK) {
         Error_Handler();
     }
@@ -135,43 +255,89 @@ void Boost_Init(void)
 void Boost_SetTarget(float v_target_rms)
 {
     boost.v_target_rms = clampf(v_target_rms, VAC_TARGET_MIN, VAC_TARGET_MAX);
-    pi_reset(&boost.v_pi);
 }
 
 void Boost_SetCurrentLimit(float i_limit)
 {
     boost.i_limit = clampf(i_limit, IOUT_LIMIT_MIN, IOUT_LIMIT_MAX);
-    pi_reset(&boost.i_pi);
 }
 
 void Boost_ControlLoop(void)
 {
-    boost.v_out_raw = adc_to_voltage(boost.adc_vout_raw);
-    boost.i_out_raw = adc_to_current(boost.adc_iout_raw);
-    boost.i_in_raw = adc_to_current(boost.adc_iin_raw);
+    update_measurements();
 
-    boost.v_out += ADC_FILTER_ALPHA * (boost.v_out_raw - boost.v_out);
-    boost.i_out += ADC_FILTER_ALPHA * (boost.i_out_raw - boost.i_out);
-    boost.i_in += ADC_FILTER_ALPHA * (boost.i_in_raw - boost.i_in);
-
-    boost.phase += INV_TWO_PI * INV_OUTPUT_FREQ_HZ / INV_CONTROL_RATE_HZ;
-    if (boost.phase >= INV_TWO_PI) {
-        boost.phase -= INV_TWO_PI;
+    if (boost.run_state == BOOST_STATE_STOPPED) {
+        boost.v_target_active_rms = 0.0f;
+        inverter_shutdown();
+        return;
     }
 
-    float sine = sinf(boost.phase);
-    float v_ref = boost.v_target_rms * 1.41421356f * sine;
-    float i_ref_amp = pi_step(&boost.v_pi, v_ref - boost.v_out);
-    i_ref_amp = clampf(i_ref_amp, -boost.i_limit, boost.i_limit);
+    if (boost.run_state == BOOST_STATE_ARMING) {
+        inverter_shutdown();
+        if (arming_samples_ok()) {
+            boost.arming_ticks++;
+            if (boost.arming_ticks >= BOOST_ARMING_TICKS) {
+                boost_enter_run();
+            }
+        } else {
+            boost.arming_ticks = 0U;
+        }
+        return;
+    }
 
-    float i_ref = i_ref_amp;
-    float modulation = pi_step(&boost.i_pi, i_ref - boost.i_out);
-    modulation = clampf(modulation, -0.96f, 0.96f);
+    update_soft_start();
+
+    uint8_t phase_wrapped = 0U;
+    boost.phase += INV_TWO_PI * INV_OUTPUT_FREQ_HZ * INV_CONTROL_TS;
+    if (boost.phase >= INV_TWO_PI) {
+        boost.phase -= INV_TWO_PI;
+        phase_wrapped = 1U;
+    }
+
+    boost.v_ref = boost.v_target_active_rms * INV_SQRT2 * sinf(boost.phase);
+
+    float v_err = boost.v_ref - boost.v_out;
+    boost.outer_output = XTQ3_PID1_P * v_err + boost.outer_integrator;
+    boost.inner_error = boost.outer_output + boost.i_in - boost.i_out;
+
+    float inverter_voltage_cmd = XTQ3_PID2_P * boost.inner_error
+                               + boost.inner_integrator
+                               + boost.v_out;
+    float modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
+    float active_modulation_limit = clampf(boost.modulation_limit,
+                                           0.0f,
+                                           BOOST_MODULATION_MAX);
+    float modulation = clampf(modulation_unclamped,
+                              -active_modulation_limit,
+                              active_modulation_limit);
+
     boost.modulation = modulation;
+    update_modulation_peak(modulation, phase_wrapped);
 
-    float duty_a = INV_DUTY_CENTER + 0.5f * modulation;
-    float duty_b = INV_DUTY_CENTER - 0.5f * modulation;
+    float duty_a = spwm_triangle_cut_duty(modulation);
+    float duty_b = spwm_triangle_cut_duty(-modulation);
     pwm_write(duty_a, duty_b);
+
+    uint8_t high_saturated = (modulation_unclamped > active_modulation_limit) ? 1U : 0U;
+    uint8_t low_saturated = (modulation_unclamped < -active_modulation_limit) ? 1U : 0U;
+    uint8_t hold_inner_integrator = ((high_saturated && boost.inner_error > 0.0f) ||
+                                     (low_saturated && boost.inner_error < 0.0f)) ? 1U : 0U;
+    uint8_t hold_outer_integrator = ((high_saturated && v_err > 0.0f) ||
+                                     (low_saturated && v_err < 0.0f)) ? 1U : 0U;
+
+    if (!hold_outer_integrator) {
+        boost.outer_integrator += XTQ3_PID1_I * v_err * INV_CONTROL_TS;
+        boost.outer_integrator = clampf(boost.outer_integrator,
+                                        -BOOST_OUTER_INTEGRATOR_MAX,
+                                        BOOST_OUTER_INTEGRATOR_MAX);
+    }
+
+    if (!hold_inner_integrator) {
+        boost.inner_integrator += XTQ3_PID2_I * boost.inner_error * INV_CONTROL_TS;
+        boost.inner_integrator = clampf(boost.inner_integrator,
+                                        -BOOST_INNER_INTEGRATOR_MAX,
+                                        BOOST_INNER_INTEGRATOR_MAX);
+    }
 }
 
 void Boost_KeyScan(void)
@@ -184,14 +350,32 @@ void Boost_KeyScan(void)
             boost.edit_mode = BOOST_EDIT_VOLTAGE;
         } else if (key == 'B') {
             boost.edit_mode = BOOST_EDIT_CURRENT;
+        } else if (key == 'C') {
+            next_cal_mode();
+        } else if (key == '#') {
+            if (boost.run_state == BOOST_STATE_STOPPED) {
+                boost.cal_mode = BOOST_CAL_NONE;
+            }
+        } else if (key == 'D') {
+            boost.cal_mode = BOOST_CAL_NONE;
+            if (boost.run_state == BOOST_STATE_RUNNING ||
+                boost.run_state == BOOST_STATE_ARMING) {
+                boost_enter_stop();
+            } else {
+                boost_enter_arming();
+            }
         } else if (key == '1') {
-            if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
+            if (boost.run_state == BOOST_STATE_STOPPED && boost.cal_mode != BOOST_CAL_NONE) {
+                adjust_current_cal_bias(SAMPLE_BIAS_STEP);
+            } else if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
                 Boost_SetTarget(boost.v_target_rms + VAC_TARGET_STEP);
             } else {
                 Boost_SetCurrentLimit(boost.i_limit + IOUT_LIMIT_STEP);
             }
         } else if (key == '2') {
-            if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
+            if (boost.run_state == BOOST_STATE_STOPPED && boost.cal_mode != BOOST_CAL_NONE) {
+                adjust_current_cal_bias(-SAMPLE_BIAS_STEP);
+            } else if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
                 Boost_SetTarget(boost.v_target_rms - VAC_TARGET_STEP);
             } else {
                 Boost_SetCurrentLimit(boost.i_limit - IOUT_LIMIT_STEP);
@@ -207,8 +391,26 @@ float Boost_GetVout(void) { return boost.v_out; }
 float Boost_GetIout(void) { return boost.i_out; }
 float Boost_GetIin(void) { return boost.i_in; }
 float Boost_GetCurrentLimit(void) { return boost.i_limit; }
-float Boost_GetDuty(void) { return boost.modulation; }
+float Boost_GetDuty(void) { return boost.modulation_peak; }
 Boost_EditMode_t Boost_GetEditMode(void) { return boost.edit_mode; }
+Boost_RunState_t Boost_GetRunState(void) { return boost.run_state; }
+Boost_CalMode_t Boost_GetCalMode(void) { return boost.cal_mode; }
+
+float Boost_GetCalBias(void)
+{
+    if (boost.cal_mode == BOOST_CAL_VOLTAGE) return boost.v_sample_bias;
+    if (boost.cal_mode == BOOST_CAL_IOUT) return boost.iout_sample_bias;
+    if (boost.cal_mode == BOOST_CAL_IIN) return boost.iin_sample_bias;
+    return 0.0f;
+}
+
+float Boost_GetCalValue(void)
+{
+    if (boost.cal_mode == BOOST_CAL_VOLTAGE) return boost.v_out;
+    if (boost.cal_mode == BOOST_CAL_IOUT) return boost.i_out;
+    if (boost.cal_mode == BOOST_CAL_IIN) return boost.i_in;
+    return 0.0f;
+}
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
@@ -220,4 +422,3 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
         boost.adc_iin_raw = HAL_ADC_GetValue(hadc);
     }
 }
-

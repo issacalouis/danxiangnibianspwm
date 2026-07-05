@@ -68,7 +68,7 @@ void SystemClock_Config(void);
     OLED_Refresh();
 
     Boost_Init();
-    Boost_SetTarget(10.0f);
+    Boost_SetTarget(VAC_TARGET_DEFAULT);
     Boost_SetCurrentLimit(1.6f);
 }
     void MX_USER_Loop(void)
@@ -77,6 +77,7 @@ void SystemClock_Config(void);
     static uint32_t last_disp_tick = 0;
     uint32_t now = HAL_GetTick();
 
+
     if (now - last_key_tick >= 20U) {
         last_key_tick = now;
         Boost_KeyScan();
@@ -84,15 +85,24 @@ void SystemClock_Config(void);
 
     if (now - last_disp_tick >= 200U) {
         last_disp_tick = now;
-        OLED_BoostUI(
-            Boost_GetTarget(),
-            Boost_GetCurrentLimit(),
-            Boost_GetVout(),
-            Boost_GetIout(),
-            Boost_GetIin(),
-            Boost_GetDuty(),
-            (uint8_t)Boost_GetEditMode()
-        );
+        if (Boost_GetCalMode() != BOOST_CAL_NONE) {
+            OLED_BoostCalUI(
+                (uint8_t)Boost_GetCalMode(),
+                Boost_GetCalBias(),
+                Boost_GetCalValue()
+            );
+        } else {
+            OLED_BoostUI(
+                Boost_GetTarget(),
+                Boost_GetCurrentLimit(),
+                Boost_GetVout(),
+                Boost_GetIout(),
+                Boost_GetIin(),
+                Boost_GetDuty(),
+                (uint8_t)Boost_GetEditMode(),
+                (uint8_t)Boost_GetRunState()
+            );
+        }
     }
   }
 /* USER CODE END PFP */

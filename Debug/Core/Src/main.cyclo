@@ -1,5 +1,5 @@
 ../Core/Src/main.c:64:9:MX_USER_Init	1
-../Core/Src/main.c:74:10:MX_USER_Loop	3
-../Core/Src/main.c:119:5:main	1
-../Core/Src/main.c:187:6:SystemClock_Config	3
-../Core/Src/main.c:236:6:Error_Handler	1
+../Core/Src/main.c:74:10:MX_USER_Loop	4
+../Core/Src/main.c:128:5:main	1
+../Core/Src/main.c:196:6:SystemClock_Config	3
+../Core/Src/main.c:245:6:Error_Handler	1

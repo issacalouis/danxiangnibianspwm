@@ -41,6 +41,7 @@ void OLED_ShowChar(uint8_t x, uint8_t y, char ch, uint8_t size);
 void OLED_ShowString(uint8_t x, uint8_t y, const char *str, uint8_t size);
 void OLED_ShowFloat(uint8_t x, uint8_t y, float val, uint8_t decimals, uint8_t size);
 void OLED_ShowInt(uint8_t x, uint8_t y, int32_t val, uint8_t size);
-void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t edit_mode);
+void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t edit_mode, uint8_t run_state);
+void OLED_BoostCalUI(uint8_t cal_mode, float bias, float value);
 
 #endif /* __OLED_H */
