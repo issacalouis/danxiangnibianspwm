@@ -217,9 +217,7 @@ void IMU_AHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, 
   float q0q0 = q0*q0;
   float q0q1 = q0*q1;
   float q0q2 = q0*q2;
-  float q0q3 = q0*q3;
   float q1q1 = q1*q1;
-  float q1q2 = q1*q2;
   float q1q3 = q1*q3;
   float q2q2 = q2*q2;   
   float q2q3 = q2*q3;
@@ -357,7 +355,6 @@ void IMU_getQ(float * q) {
 *******************************************************************************/
 void IMU_getYawPitchRoll(float * angles) {
   float q[4]; //　四元数
-  volatile float gx=0.0, gy=0.0, gz=0.0; //估计重力方向
   IMU_getQ(q); //更新全局四元数
   
   angles[0] = -atan2(2 * q[1] * q[2] + 2 * q[0] * q[3], -2 * q[2]*q[2] - 2 * q[3] * q[3] + 1)* 180/M_PI; // yaw

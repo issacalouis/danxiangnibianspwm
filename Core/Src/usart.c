@@ -203,7 +203,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	if(huart->Instance==USART1)
 	{
-		printf("%d",USART1->DR);
+		printf("%lu", (unsigned long)USART1->DR);
 		HAL_UART_Receive_IT(&huart1,uart1_data,sizeof(uart1_data));
 	}
 	else if(huart->Instance==USART2)
