@@ -10,4 +10,4 @@
 ../Core/Src/oled.c:219:6:OLED_ShowInt	32	static
 ../Core/Src/oled.c:229:6:OLED_DrawLine	40	static
 ../Core/Src/oled.c:249:6:OLED_DrawRect	32	static
-../Core/Src/oled.c:276:6:OLED_BoostUI	40	static
+../Core/Src/oled.c:266:6:OLED_BoostUI	40	static

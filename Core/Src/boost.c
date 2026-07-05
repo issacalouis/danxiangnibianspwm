@@ -1,209 +1,251 @@
 #include "boost.h"
 #include "main.h"
 #include "gpio.h"
+#include <math.h>
 
-/* ============================================================
- *  boost.c - Boost closed-loop voltage control (PI)
- *
- *  Call sequence:
- *    1. Call Boost_Init() in main() to initialize PWM and ADC.
- *    2. Call Boost_ControlLoop() periodically, recommended 1 ms.
- *    3. Call Boost_KeyScan() slowly in the main loop to adjust target voltage.
- * ============================================================ */
-
-/* ---------- Global instance ---------- */
 Boost_t boost = {
-    .v_target     = VOUT_TARGET_DEFAULT,
-    .v_out        = 0.0f,
-    .v_out_raw    = 0.0f,
-    .v_in         = VIN_DEFAULT,
-    .duty         = 0.0f,
-    .adc_raw      = 0,
-    .adc_vin_raw  = 0,
-    .pi = {
-        .kp           = PI_KP,
-        .ki           = PI_KI,
-        .integral     = 0.0f,
+    .v_target_rms = VAC_TARGET_DEFAULT,
+    .i_limit = IOUT_LIMIT_DEFAULT,
+    .iin_oc_limit = IIN_OC_LIMIT_DEFAULT,
+    .v_out = 0.0f,
+    .v_out_raw = 0.0f,
+    .i_out = 0.0f,
+    .i_out_raw = 0.0f,
+    .i_in = 0.0f,
+    .i_in_raw = 0.0f,
+    .phase = 0.0f,
+    .modulation = 0.0f,
+    .duty_a = INV_DUTY_CENTER,
+    .duty_b = INV_DUTY_CENTER,
+    .fault_oc = 0U,
+    .edit_mode = BOOST_EDIT_VOLTAGE,
+    .adc_vout_raw = 0U,
+    .adc_iout_raw = 0U,
+    .adc_iin_raw = 0U,
+    .v_pi = {
+        .kp = V_LOOP_KP,
+        .ki = V_LOOP_KI,
+        .integral = 0.0f,
         .integral_max = PI_INTEGRAL_MAX,
         .integral_min = PI_INTEGRAL_MIN,
-        .output       = 0.0f,
+        .output = 0.0f,
+    },
+    .i_pi = {
+        .kp = I_LOOP_KP,
+        .ki = I_LOOP_KI,
+        .integral = 0.0f,
+        .integral_max = PI_INTEGRAL_MAX,
+        .integral_min = PI_INTEGRAL_MIN,
+        .output = 0.0f,
     },
 };
 
-/* Incremental PI state: last control error.
- * Keep it file-local so Boost_ControlLoop() interface stays unchanged.
- */
-static float boost_pi_error_last = 0.0f;
+static float clampf(float value, float min_value, float max_value)
+{
+    if (value > max_value) return max_value;
+    if (value < min_value) return min_value;
+    return value;
+}
 
-/* Convert ADC sample to actual output voltage. */
-static float ADC_ToVout(uint32_t raw)
+static float adc_to_voltage(uint32_t raw)
 {
     float vadc = (float)raw * ADC_VREF / ADC_RESOLUTION;
-    float vout = (vadc - SAMPLE_BIAS) * SAMPLE_RATIO;
-    if (vout < 0.0f) vout = 0.0f;
-    return vout;
+    return (vadc - SAMPLE_BIAS) * VOLTAGE_SAMPLE_RATIO;
 }
 
-/* Convert ADC sample to input voltage. */
-static float ADC_ToVin(uint32_t raw)
+static float adc_to_current(uint32_t raw)
 {
     float vadc = (float)raw * ADC_VREF / ADC_RESOLUTION;
-    float vin = (vadc - VIN_SAMPLE_BIAS) * VIN_SAMPLE_RATIO;
-    if (vin < 0.0f) vin = 0.0f;
-    return vin;
+    return (vadc - SAMPLE_BIAS) * CURRENT_SAMPLE_RATIO;
 }
 
-/* Calculate feedforward duty based on ideal Boost equation: D = 1 - Vin/Vout */
-static float Calc_Feedforward(float v_in, float v_target)
+static float pi_step(PI_Controller_t *pi, float error)
 {
-    if (v_target <= v_in) return BOOST_DUTY_MIN;
-    float duty_ff = 1.0f - v_in / v_target;
-    if (duty_ff > BOOST_DUTY_MAX) duty_ff = BOOST_DUTY_MAX;
-    if (duty_ff < BOOST_DUTY_MIN) duty_ff = BOOST_DUTY_MIN;
-    return duty_ff;
+    pi->integral += pi->ki * error;
+    pi->integral = clampf(pi->integral, pi->integral_min, pi->integral_max);
+    pi->output = pi->kp * error + pi->integral;
+    return pi->output;
 }
 
-/* Set TIM1 CH1 duty. */
-static void PWM_SetDuty(float duty)
+static void pi_reset(PI_Controller_t *pi)
 {
-    if (duty > BOOST_DUTY_MAX) duty = BOOST_DUTY_MAX;
-    if (duty < BOOST_DUTY_MIN) duty = BOOST_DUTY_MIN;
+    pi->integral = 0.0f;
+    pi->output = 0.0f;
+}
 
-    boost.duty = duty;
-    uint32_t ccr = (uint32_t)(duty * (float)(BOOST_PWM_ARR + 1));
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr);
+static void pwm_write(float duty_a, float duty_b)
+{
+    duty_a = clampf(duty_a, INV_DUTY_MIN, INV_DUTY_MAX);
+    duty_b = clampf(duty_b, INV_DUTY_MIN, INV_DUTY_MAX);
 
-    /* TIM1_CH2 is used as ADC1 trigger only (no GPIO output).
-     * Put the ADC trigger at the middle of the PWM off-time:
-     *   trigger = CCR1 + (ARR + 1 - CCR1) / 2
-     * This keeps the sample away from the CH1 switching edge while duty changes.
-     */
-    uint32_t adc_trigger_ccr = ccr + ((BOOST_PWM_ARR + 1U - ccr) / 2U);
-    if (adc_trigger_ccr > BOOST_PWM_ARR) {
-        adc_trigger_ccr = BOOST_PWM_ARR;
+    boost.duty_a = duty_a;
+    boost.duty_b = duty_b;
+
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
+                          (uint32_t)(duty_a * (float)(INV_PWM_ARR + 1U)));
+    __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2,
+                          (uint32_t)(duty_b * (float)(INV_PWM_ARR + 1U)));
+
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (INV_PWM_ARR + 1U) / 2U);
+}
+
+static void inverter_shutdown(void)
+{
+    boost.modulation = 0.0f;
+    pwm_write(INV_DUTY_CENTER, INV_DUTY_CENTER);
+    pi_reset(&boost.v_pi);
+    pi_reset(&boost.i_pi);
+}
+
+static void adc2_sample_currents(void)
+{
+    if (HAL_ADC_Start(&hadc2) != HAL_OK) {
+        return;
     }
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, adc_trigger_ccr);
+
+    if (HAL_ADC_PollForConversion(&hadc2, 1U) == HAL_OK) {
+        boost.adc_iout_raw = HAL_ADC_GetValue(&hadc2);
+    }
+
+    if (HAL_ADC_PollForConversion(&hadc2, 1U) == HAL_OK) {
+        boost.adc_iin_raw = HAL_ADC_GetValue(&hadc2);
+    }
+
+    HAL_ADC_Stop(&hadc2);
 }
 
 void Boost_Init(void)
 {
-    PWM_SetDuty(BOOST_DUTY_MIN);
+    inverter_shutdown();
 
-    /* Start ADC1 in interrupt mode. Conversions are triggered by TIM1_CC2. */
     if (HAL_ADC_Start_IT(&hadc1) != HAL_OK) {
         Error_Handler();
     }
 
-    /* Start TIM1 CH1 PWM (PE9), and complementary CH1N (PA7). */
+    __HAL_TIM_SET_COUNTER(&htim1, 0U);
+    __HAL_TIM_SET_COUNTER(&htim8, 0U);
+
     if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) {
         Error_Handler();
     }
     if (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) {
         Error_Handler();
     }
-
-    /* Start TIM1 CH2 as the ADC trigger source, no GPIO is configured for CH2. */
     if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_2) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_TIM_Base_Start_IT(&htim6) != HAL_OK) {
         Error_Handler();
     }
 }
 
-void Boost_SetTarget(float v_target)
+void Boost_SetTarget(float v_target_rms)
 {
-    if (v_target > VOUT_TARGET_MAX) v_target = VOUT_TARGET_MAX;
-    if (v_target < VOUT_TARGET_MIN) v_target = VOUT_TARGET_MIN;
+    boost.v_target_rms = clampf(v_target_rms, VAC_TARGET_MIN, VAC_TARGET_MAX);
+    pi_reset(&boost.v_pi);
+}
 
-    boost.v_target = v_target;
+void Boost_SetCurrentLimit(float i_limit)
+{
+    boost.i_limit = clampf(i_limit, IOUT_LIMIT_MIN, IOUT_LIMIT_MAX);
+    pi_reset(&boost.i_pi);
+}
 
-    /* Reset PI internal state when target changes to avoid stale error history. */
-    boost.pi.integral = 0.0f;
-    boost.pi.output = boost.duty;
-    boost_pi_error_last = 0.0f;
+void Boost_ClearFault(void)
+{
+    boost.fault_oc = 0U;
+    inverter_shutdown();
 }
 
 void Boost_ControlLoop(void)
 {
-    /* 1. ADC sampling - Vout
-     * ADC1 raw value is updated by TIM1_CC2-triggered conversion complete IRQ.
-     * Control loop only consumes the latest sampled value here.
-     */
-    boost.v_out_raw = ADC_ToVout(boost.adc_raw);
+    adc2_sample_currents();
 
-    /* ADC一阶低通滤波，减少开关纹波干扰 */
-    boost.v_out = (1.0f - ADC_FILTER_ALPHA) * boost.v_out
-                + ADC_FILTER_ALPHA * boost.v_out_raw;
+    boost.v_out_raw = adc_to_voltage(boost.adc_vout_raw);
+    boost.i_out_raw = adc_to_current(boost.adc_iout_raw);
+    boost.i_in_raw = adc_to_current(boost.adc_iin_raw);
 
-    /* TODO: 如果硬件支持Vin采样，在此处读取并更新boost.v_in
-     * 示例代码（需配置ADC多通道）：
-     * HAL_ADC_PollForConversion(&hadc1, 1);
-     * boost.adc_vin_raw = HAL_ADC_GetValue(&hadc1);
-     * boost.v_in = ADC_ToVin(boost.adc_vin_raw);
-     */
+    boost.v_out += ADC_FILTER_ALPHA * (boost.v_out_raw - boost.v_out);
+    boost.i_out += ADC_FILTER_ALPHA * (boost.i_out_raw - boost.i_out);
+    boost.i_in += ADC_FILTER_ALPHA * (boost.i_in_raw - boost.i_in);
 
-    /* 2. Error */
-    float error = boost.v_target - boost.v_out;
-
-#if ENABLE_FEEDFORWARD
-    /* 3. 前馈 + 增量式PI控制
-     *    duty_ff = 1 - Vin/Vout (理想Boost占空比)
-     *    du(k) = Kp * [e(k) - e(k-1)] + Ki * e(k)
-     *    duty(k) = duty_ff + du(k)
-     */
-    float duty_ff = Calc_Feedforward(boost.v_in, boost.v_target);
-    float delta = boost.pi.kp * (error - boost_pi_error_last)
-                + boost.pi.ki * error;
-    float new_duty = duty_ff + delta;
-#else
-    /* 3. 纯增量式PI (无前馈)
-     *    du(k) = Kp * [e(k) - e(k-1)] + Ki * e(k)
-     *    u(k)  = u(k-1) + du(k)
-     */
-    float delta = boost.pi.kp * (error - boost_pi_error_last)
-                + boost.pi.ki * error;
-    float new_duty = boost.duty + delta;
-#endif
-
-    /* 4. 抗积分饱和：占空比饱和时，如果误差方向还在让输出继续饱和，
-     *    则回退本次的积分增量，避免积分项继续累积 */
-    if ((new_duty > BOOST_DUTY_MAX && error > 0.0f) ||
-        (new_duty < BOOST_DUTY_MIN && error < 0.0f)) {
-        /* 饱和且误差方向不利 → 冻结积分，回退Ki项 */
-        new_duty -= boost.pi.ki * error;
+    if (fabsf(boost.i_in_raw) >= boost.iin_oc_limit) {
+        boost.fault_oc = 1U;
     }
 
-    /* 5. Limit output and update PWM */
-    PWM_SetDuty(new_duty);
+    if (boost.fault_oc != 0U) {
+        inverter_shutdown();
+        return;
+    }
 
-    /* 6. Save state for next incremental PI step */
-    boost_pi_error_last = error;
-    boost.pi.integral = 0.0f;  /* 增量式PI不使用此字段，保留用于调试 */
-    boost.pi.output = boost.duty;
+    boost.phase += INV_TWO_PI * INV_OUTPUT_FREQ_HZ / INV_CONTROL_RATE_HZ;
+    if (boost.phase >= INV_TWO_PI) {
+        boost.phase -= INV_TWO_PI;
+    }
+
+    float sine = sinf(boost.phase);
+    float v_ref = boost.v_target_rms * 1.41421356f * sine;
+    float i_ref_amp = pi_step(&boost.v_pi, v_ref - boost.v_out);
+    i_ref_amp = clampf(i_ref_amp, -boost.i_limit, boost.i_limit);
+
+    float i_ref = i_ref_amp;
+    float modulation = pi_step(&boost.i_pi, i_ref - boost.i_out);
+    modulation = clampf(modulation, -0.90f, 0.90f);
+    boost.modulation = modulation;
+
+    float duty_a = INV_DUTY_CENTER + 0.5f * modulation;
+    float duty_b = INV_DUTY_CENTER - 0.5f * modulation;
+    pwm_write(duty_a, duty_b);
 }
 
 void Boost_KeyScan(void)
 {
-    static uint8_t key_last = 0;
+    static uint8_t key_last = 0U;
     uint8_t key = get_keyboard_value();
 
-    /* Only act once when a new key value is detected. */
-    if (key != key_last) {
-        if (key == '1') {
-            Boost_SetTarget(boost.v_target + VOUT_TARGET_STEP);
+    if (key != 0U && key != key_last) {
+        if (key == 'A') {
+            boost.edit_mode = BOOST_EDIT_VOLTAGE;
+        } else if (key == 'B') {
+            boost.edit_mode = BOOST_EDIT_CURRENT;
+        } else if (key == '1') {
+            if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
+                Boost_SetTarget(boost.v_target_rms + VAC_TARGET_STEP);
+            } else {
+                Boost_SetCurrentLimit(boost.i_limit + IOUT_LIMIT_STEP);
+            }
         } else if (key == '2') {
-            Boost_SetTarget(boost.v_target - VOUT_TARGET_STEP);
+            if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
+                Boost_SetTarget(boost.v_target_rms - VAC_TARGET_STEP);
+            } else {
+                Boost_SetCurrentLimit(boost.i_limit - IOUT_LIMIT_STEP);
+            }
+        } else if (key == '#') {
+            Boost_ClearFault();
         }
     }
 
     key_last = key;
 }
 
-float Boost_GetVout(void)   { return boost.v_out;    }
-float Boost_GetDuty(void)   { return boost.duty;     }
-float Boost_GetTarget(void) { return boost.v_target; }
+float Boost_GetTarget(void) { return boost.v_target_rms; }
+float Boost_GetVout(void) { return boost.v_out; }
+float Boost_GetIout(void) { return boost.i_out; }
+float Boost_GetIin(void) { return boost.i_in; }
+float Boost_GetCurrentLimit(void) { return boost.i_limit; }
+float Boost_GetDuty(void) { return boost.modulation; }
+uint8_t Boost_GetFault(void) { return boost.fault_oc; }
+Boost_EditMode_t Boost_GetEditMode(void) { return boost.edit_mode; }
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
     if (hadc->Instance == ADC1) {
-        boost.adc_raw = HAL_ADC_GetValue(hadc);
+        boost.adc_vout_raw = HAL_ADC_GetValue(hadc);
     }
 }

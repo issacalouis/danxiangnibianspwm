@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 
-/* oled.h 里没有专用 UI 所需的尺寸宏时，在这里补齐 */
+/* oled.h ????????UI ?????????????????????*/
 #ifndef OLED_WIDTH
 #define OLED_WIDTH   128
 #endif
@@ -16,14 +16,14 @@
 #endif
 
 /* ============================================================
- *  oled.c  —  SSD1306 128×64 SPI驱动
+ *  oled.c  ?? SSD1306 128?64 SPI???
  * ============================================================ */
 
-/* ---------- 显存缓冲区 ---------- */
+/* ---------- ????????---------- */
 static uint8_t oled_buf[OLED_PAGES][OLED_WIDTH];
 
 /* ============================================================
- *  内嵌 8×16 ASCII 字库 (32..127)，每个字符16字节(上8行+下8行)
+ *  ??? 8?16 ASCII ??? (32..127)????????6???(????????
  * ============================================================ */
 static const uint8_t Font8x16[][16] = {
     {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, /* ' ' */
@@ -85,20 +85,20 @@ static const uint8_t Font8x16[][16] = {
     {0x08,0x18,0x68,0x80,0x80,0x68,0x18,0x08,0x20,0x30,0x2C,0x03,0x03,0x2C,0x30,0x20}, /* 'X' */
     {0x08,0x38,0xC8,0x00,0xC8,0x38,0x08,0x00,0x00,0x00,0x20,0x3F,0x20,0x00,0x00,0x00}, /* 'Y' */
     {0x10,0x08,0x08,0xC8,0x38,0x08,0x00,0x00,0x20,0x38,0x26,0x21,0x20,0x30,0x28,0x00}, /* 'Z' */
-    /* 只列到Z，其余用空格代替，实际使用时可继续扩展 */
+    /* ??????????????????????????????????*/
 };
 
 /* ============================================================
- *  底层 SPI 发送
+ *  ??? SPI ????
  * ============================================================ */
 static void OLED_WriteByte(uint8_t dat, uint8_t cmd)
 {
     /*
-     * 引脚控制保持与 Core/Src/oled.c 一致：
-     *   DC = 0：命令
-     *   DC = 1：数据
-     *   CS = 0：片选有效
-     *   RES 由 OLED_RES_Clr/OLED_RES_Set 控制
+     * ???????????Core/Src/oled.c ?????
+     *   DC = 0?????
+     *   DC = 1?????
+     *   CS = 0????????
+     *   RES ??OLED_RES_Clr/OLED_RES_Set ???
      */
     if (cmd) OLED_DC_Set();
     else     OLED_DC_Clr();
@@ -112,7 +112,7 @@ static void OLED_WriteByte(uint8_t dat, uint8_t cmd)
 static void OLED_WriteCmd(uint8_t cmd)  { OLED_WriteByte(cmd, 0); }
 
 /* ============================================================
- *  OLED_Init  —  SSD1306 初始化序列
+ *  OLED_Init  ?? SSD1306 ????????
  * ============================================================ */
 void OLED_Init(void)
 {
@@ -121,22 +121,22 @@ void OLED_Init(void)
     OLED_RES_Set();
     HAL_Delay(100);
 
-    OLED_WriteCmd(0xAE); /* 关显示 */
-    OLED_WriteCmd(0xD5); OLED_WriteCmd(0x80); /* 时钟分频 */
+    OLED_WriteCmd(0xAE); /* ?????*/
+    OLED_WriteCmd(0xD5); OLED_WriteCmd(0x80); /* ?????? */
     OLED_WriteCmd(0xA8); OLED_WriteCmd(0x3F); /* Mux ratio 63 */
-    OLED_WriteCmd(0xD3); OLED_WriteCmd(0x00); /* 显示偏移0 */
-    OLED_WriteCmd(0x40);                       /* 起始行0 */
-    OLED_WriteCmd(0x8D); OLED_WriteCmd(0x14); /* 使能电荷泵 */
-    OLED_WriteCmd(0x20); OLED_WriteCmd(0x00); /* 水平寻址模式 */
-    OLED_WriteCmd(0xA1);                       /* 段重映射 */
-    OLED_WriteCmd(0xC8);                       /* COM扫描方向 */
-    OLED_WriteCmd(0xDA); OLED_WriteCmd(0x12); /* COM引脚配置 */
-    OLED_WriteCmd(0x81); OLED_WriteCmd(0xCF); /* 对比度 */
-    OLED_WriteCmd(0xD9); OLED_WriteCmd(0xF1); /* 预充电 */
+    OLED_WriteCmd(0xD3); OLED_WriteCmd(0x00); /* ??????0 */
+    OLED_WriteCmd(0x40);                       /* ????? */
+    OLED_WriteCmd(0x8D); OLED_WriteCmd(0x14); /* ????????*/
+    OLED_WriteCmd(0x20); OLED_WriteCmd(0x00); /* ????????? */
+    OLED_WriteCmd(0xA1);                       /* ?????? */
+    OLED_WriteCmd(0xC8);                       /* COM?????? */
+    OLED_WriteCmd(0xDA); OLED_WriteCmd(0x12); /* COM?????? */
+    OLED_WriteCmd(0x81); OLED_WriteCmd(0xCF); /* ?????*/
+    OLED_WriteCmd(0xD9); OLED_WriteCmd(0xF1); /* ?????*/
     OLED_WriteCmd(0xDB); OLED_WriteCmd(0x40); /* VCOMH */
-    OLED_WriteCmd(0xA4);                       /* 全局显示打开 */
-    OLED_WriteCmd(0xA6);                       /* 正常显示 */
-    OLED_WriteCmd(0xAF);                       /* 开显示 */
+    OLED_WriteCmd(0xA4);                       /* ????????? */
+    OLED_WriteCmd(0xA6);                       /* ?????? */
+    OLED_WriteCmd(0xAF);                       /* ????? */
 
     OLED_Clear();
     OLED_Refresh();
@@ -176,8 +176,8 @@ void OLED_DrawPoint(uint8_t x, uint8_t y, uint8_t color)
 }
 
 /* ============================================================
- *  OLED_ShowChar  (8×16)
- *  size 参数预留（当前仅支持8×16）
+ *  OLED_ShowChar  (8?16)
+ *  size ???????????????8?16??
  * ============================================================ */
 void OLED_ShowChar(uint8_t x, uint8_t y, char ch, uint8_t size)
 {
@@ -261,46 +261,36 @@ void OLED_DrawRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t fill)
 }
 
 /* ============================================================
- *  OLED_BoostUI  —  Boost专用界面
- *
- *  布局（128×64）：
- *  ┌──────────────────────────────┐
- *  │   BOOST CTRL                 │  行0   标题
- *  │─────────────────────────────│
- *  │ SET: 12.0V                   │  行16  目标电压
- *  │ OUT: 11.8V                   │  行32  实测电压
- *  │ DUTY: 45.2%                  │  行48  占空比
- *  │[============================]│  行56  进度条
- *  └──────────────────────────────┘
+ *  OLED_BoostUI  -  Inverter control interface
  * ============================================================ */
-void OLED_BoostUI(float v_target, float v_out, float duty)
+void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t fault, uint8_t edit_mode)
 {
     OLED_Clear();
 
-    /* 标题 */
-    OLED_ShowString(0, 0, "BOOST CTRL", 16);
-    OLED_DrawLine(0, 15, 127, 15);
+    OLED_ShowString(0, 0, "INV CTRL", 16);
+    if (fault) {
+        OLED_ShowString(72, 0, "OC", 16);
+    } else if (edit_mode == 0U) {
+        OLED_ShowString(72, 0, "SET V", 16);
+    } else {
+        OLED_ShowString(72, 0, "SET I", 16);
+    }
 
-    /* 目标电压 */
-    OLED_ShowString(0, 16, "SET:", 16);
-    OLED_ShowFloat(32, 16, v_target, 1, 16);
-    OLED_ShowString(80, 16, "V", 16);
+    OLED_ShowString(0, 16, "SV:", 16);
+    OLED_ShowFloat(24, 16, v_target, 1, 16);
+    OLED_ShowString(72, 16, "LI:", 16);
+    OLED_ShowFloat(96, 16, i_limit, 1, 16);
 
-    /* 实测电压 */
-    OLED_ShowString(0, 32, "OUT:", 16);
-    OLED_ShowFloat(32, 32, v_out, 1, 16);
-    OLED_ShowString(80, 32, "V", 16);
+    OLED_ShowString(0, 32, "V:", 16);
+    OLED_ShowFloat(16, 32, v_out, 1, 16);
+    OLED_ShowString(64, 32, "Io:", 16);
+    OLED_ShowFloat(88, 32, i_out, 1, 16);
 
-    /* 占空比 */
-    OLED_ShowString(0, 48, "D:", 16);
-    OLED_ShowFloat(16, 48, duty * 100.0f, 1, 16);
-    OLED_ShowString(72, 48, "%", 16);
-
-    /* 占空比进度条（最后一行，y=56~63） */
-    OLED_DrawRect(88, 50, 38, 10, 0);
-    uint8_t bar_w = (uint8_t)(duty * 36.0f);
-    if (bar_w > 36) bar_w = 36;
-    if (bar_w > 0) OLED_DrawRect(89, 51, bar_w, 8, 1);
+    OLED_ShowString(0, 48, "Ii:", 16);
+    OLED_ShowFloat(24, 48, i_in, 1, 16);
+    OLED_ShowString(72, 48, "M:", 16);
+    OLED_ShowFloat(88, 48, modulation, 2, 16);
 
     OLED_Refresh();
 }
+

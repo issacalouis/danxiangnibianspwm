@@ -25,11 +25,12 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include "boost.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "oled.h"
+#include "boost.h"
 #include "../IMU/IMU.h"
 #include "w25q64.h"
 #include "dac.h"
@@ -62,54 +63,37 @@ void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
    void MX_USER_Init(void)
 {
-    /* 初始化 OLED（必须在 SPI3 MX_SPI3_Init() 之后） */
     OLED_Init();
     OLED_ShowString(0, 0, "INITIALIZING", 16);
     OLED_Refresh();
 
-    /* 初始化 Boost 控制（必须在 TIM1 和 ADC1 MX_xxx_Init() 之后） */
-    Boost_Init();                        /* 启动 PWM 和 ADC          */
-    Boost_SetTarget(12.0f);             /* 设定初始目标电压 12V      */
+    Boost_Init();
+    Boost_SetTarget(12.0f);
+    Boost_SetCurrentLimit(2.0f);
 }
     void MX_USER_Loop(void)
   {
-    static uint32_t last_ctrl_tick = 0;
+    static uint32_t last_key_tick = 0;
     static uint32_t last_disp_tick = 0;
     uint32_t now = HAL_GetTick();
 
-    /* 1ms 执行一次 PI 控制环 */
-    if (now - last_ctrl_tick >= 1U) {
-        last_ctrl_tick = now;
-        Boost_ControlLoop();
+    if (now - last_key_tick >= 20U) {
+        last_key_tick = now;
+        Boost_KeyScan();
     }
 
-    /* 10ms 扫描按键 */
-    Boost_KeyScan();
-
-    /* 200ms 刷新 OLED 显示 */
     if (now - last_disp_tick >= 200U) {
         last_disp_tick = now;
         OLED_BoostUI(
-            Boost_GetTarget(),   /* 目标电压 */
-            Boost_GetVout(),     /* 实测电压 */
-            Boost_GetDuty()      /* 当前占空比 */
+            Boost_GetTarget(),
+            Boost_GetCurrentLimit(),
+            Boost_GetVout(),
+            Boost_GetIout(),
+            Boost_GetIin(),
+            Boost_GetDuty(),
+            Boost_GetFault(),
+            (uint8_t)Boost_GetEditMode()
         );
-    }
-  }
-
-    static void MX_ADC1_DisplayLoop(void)
-  {
-    static uint32_t last_adc_disp_tick = 0;
-    uint32_t now = HAL_GetTick();
-
-    /* Refresh ADC1 raw value on OLED every 100ms */
-    if (now - last_adc_disp_tick >= 100U) {
-        last_adc_disp_tick = now;
-
-        OLED_ShowString(0, 48, "                ", 16);
-        OLED_ShowString(0, 48, "ADC1:", 16);
-        OLED_ShowInt(40, 48, (int32_t)boost.adc_raw, 16);
-        OLED_Refresh();
     }
   }
 /* USER CODE END PFP */
@@ -159,7 +143,6 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   MX_SPI3_Init();
-  MX_TIM1_Init();
   MX_TIM6_Init();
   MX_SPI2_Init();
   MX_SPI1_Init();
@@ -170,6 +153,8 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM9_Init();
   MX_USART2_UART_Init();
+  MX_TIM1_Init();
+  MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim9,TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim9,TIM_CHANNEL_2);
@@ -185,15 +170,14 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-  
+
     /* USER CODE BEGIN 3 */
     MX_USER_Loop();
   //  MX_ADC1_DisplayLoop();
   
   }
 
-    /* USER CODE END 3 */
-   
+  /* USER CODE END 3 */
 }
 
 /**
@@ -276,3 +260,5 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
+
