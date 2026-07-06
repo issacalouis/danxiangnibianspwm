@@ -195,7 +195,8 @@ static void update_qpr_coefficients(float frequency_hz)
 
 static uint8_t overcurrent_active(void)
 {
-    return (fabsf(boost.i_out_raw) >= boost.i_limit ||`r`n            fabsf(boost.i_out) >= boost.i_limit) ? 1U : 0U;
+    return (fabsf(boost.i_out_raw) >= boost.i_limit ||
+            fabsf(boost.i_out) >= boost.i_limit) ? 1U : 0U;
 }
 
 static uint8_t overcurrent_cleared(void)

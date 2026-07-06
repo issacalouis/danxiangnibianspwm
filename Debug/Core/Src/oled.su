@@ -11,4 +11,4 @@
 ../Core/Src/oled.c:230:6:OLED_DrawLine	40	static
 ../Core/Src/oled.c:250:6:OLED_DrawRect	32	static
 ../Core/Src/oled.c:267:6:OLED_BoostUI	40	static
-../Core/Src/oled.c:302:6:OLED_BoostCalUI	24	static
+../Core/Src/oled.c:308:6:OLED_BoostCalUI	24	static

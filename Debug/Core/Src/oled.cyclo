@@ -10,5 +10,5 @@
 ../Core/Src/oled.c:220:6:OLED_ShowInt	1
 ../Core/Src/oled.c:230:6:OLED_DrawLine	9
 ../Core/Src/oled.c:250:6:OLED_DrawRect	6
-../Core/Src/oled.c:267:6:OLED_BoostUI	4
-../Core/Src/oled.c:302:6:OLED_BoostCalUI	4
+../Core/Src/oled.c:267:6:OLED_BoostUI	6
+../Core/Src/oled.c:308:6:OLED_BoostCalUI	4
