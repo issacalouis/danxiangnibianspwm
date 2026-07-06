@@ -49,8 +49,8 @@
 #define BOOST_INNER_INTEGRATOR_MAX  (20.0f)
 
 #define BOOST_ARMING_TICKS          (1000U)
-#define BOOST_ARMING_V_MAX          (1.0f)
-#define BOOST_ARMING_I_MAX          (0.5f)
+#define BOOST_ARMING_V_MAX          (5.0f)
+#define BOOST_ARMING_I_MAX          (1.0f)
 
 #define VAC_TARGET_DEFAULT          (10.0f)
 #define VAC_TARGET_MIN              (0.0f)
