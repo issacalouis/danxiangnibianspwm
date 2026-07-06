@@ -7,6 +7,7 @@ Boost_t boost = {
     .v_target_rms = VAC_TARGET_DEFAULT,
     .v_target_active_rms = 0.0f,
     .i_limit = IOUT_LIMIT_DEFAULT,
+    .output_freq_hz = INV_OUTPUT_FREQ_DEFAULT_HZ,
     .v_ref = 0.0f,
     .v_out = 0.0f,
     .v_out_raw = 0.0f,
@@ -25,6 +26,11 @@ Boost_t boost = {
     .qpr_e2 = 0.0f,
     .qpr_y1 = 0.0f,
     .qpr_y2 = 0.0f,
+    .qpr_b0 = BOOST_QPR_B0,
+    .qpr_b1 = BOOST_QPR_B1,
+    .qpr_b2 = BOOST_QPR_B2,
+    .qpr_a1 = BOOST_QPR_A1,
+    .qpr_a2 = BOOST_QPR_A2,
     .phase = 0.0f,
     .modulation = 0.0f,
     .modulation_limit = 0.0f,
@@ -33,6 +39,7 @@ Boost_t boost = {
     .duty_a = INV_DUTY_CENTER,
     .duty_b = INV_DUTY_CENTER,
     .arming_ticks = 0U,
+    .fault_recover_ticks = 0U,
     .edit_mode = BOOST_EDIT_VOLTAGE,
     .run_state = BOOST_STATE_STOPPED,
     .cal_mode = BOOST_CAL_NONE,
@@ -119,6 +126,7 @@ static void boost_enter_stop(void)
     boost.run_state = BOOST_STATE_STOPPED;
     boost.v_target_active_rms = 0.0f;
     boost.arming_ticks = 0U;
+    boost.fault_recover_ticks = 0U;
     inverter_shutdown();
 }
 
@@ -127,6 +135,7 @@ static void boost_enter_arming(void)
     boost.run_state = BOOST_STATE_ARMING;
     boost.v_target_active_rms = 0.0f;
     boost.arming_ticks = 0U;
+    boost.fault_recover_ticks = 0U;
     inverter_shutdown();
 }
 
@@ -135,7 +144,17 @@ static void boost_enter_run(void)
     boost.run_state = BOOST_STATE_RUNNING;
     boost.v_target_active_rms = 0.0f;
     boost.arming_ticks = 0U;
+    boost.fault_recover_ticks = 0U;
     reset_control_state();
+}
+
+static void boost_enter_fault(void)
+{
+    boost.run_state = BOOST_STATE_FAULT;
+    boost.v_target_active_rms = 0.0f;
+    boost.arming_ticks = 0U;
+    boost.fault_recover_ticks = 0U;
+    inverter_shutdown();
 }
 
 static void update_measurements(void)
@@ -149,13 +168,52 @@ static void update_measurements(void)
     boost.i_in += ADC_FILTER_ALPHA * (boost.i_in_raw - boost.i_in);
 }
 
+static void clear_qpr_history(void)
+{
+    boost.qpr_e1 = 0.0f;
+    boost.qpr_e2 = 0.0f;
+    boost.qpr_y1 = 0.0f;
+    boost.qpr_y2 = 0.0f;
+}
+
+static void update_qpr_coefficients(float frequency_hz)
+{
+    float t = INV_CONTROL_TS;
+    float wc = INV_TWO_PI * BOOST_QPR_BANDWIDTH_HZ;
+    float w0 = INV_TWO_PI * frequency_hz;
+    float w0t = w0 * t;
+    float w0t2 = w0t * w0t;
+    float den = 4.0f + 4.0f * wc * t + w0t2;
+    float b0 = (4.0f * BOOST_QPR_KR * wc * t) / den;
+
+    boost.qpr_b0 = b0;
+    boost.qpr_b1 = 0.0f;
+    boost.qpr_b2 = -b0;
+    boost.qpr_a1 = (-8.0f + 2.0f * w0t2) / den;
+    boost.qpr_a2 = (4.0f - 4.0f * wc * t + w0t2) / den;
+}
+
+static uint8_t overcurrent_active(void)
+{
+    return (fabsf(boost.i_out_raw) >= boost.i_limit ||`r`n            fabsf(boost.i_out) >= boost.i_limit) ? 1U : 0U;
+}
+
+static uint8_t overcurrent_cleared(void)
+{
+    float recover_level = boost.i_limit - IOUT_RECOVER_HYSTERESIS_A;
+    if (recover_level < IOUT_LIMIT_MIN) {
+        recover_level = IOUT_LIMIT_MIN;
+    }
+    return (fabsf(boost.i_out) <= recover_level) ? 1U : 0U;
+}
+
 static float qpr_resonant_predict(float error)
 {
-    float resonant = BOOST_QPR_B0 * error
-                   + BOOST_QPR_B1 * boost.qpr_e1
-                   + BOOST_QPR_B2 * boost.qpr_e2
-                   - BOOST_QPR_A1 * boost.qpr_y1
-                   - BOOST_QPR_A2 * boost.qpr_y2;
+    float resonant = boost.qpr_b0 * error
+                   + boost.qpr_b1 * boost.qpr_e1
+                   + boost.qpr_b2 * boost.qpr_e2
+                   - boost.qpr_a1 * boost.qpr_y1
+                   - boost.qpr_a2 * boost.qpr_y2;
 
     return clampf(resonant,
                   -BOOST_QPR_RESONANT_MAX_V,
@@ -246,6 +304,7 @@ static void next_cal_mode(void)
 
 void Boost_Init(void)
 {
+    update_qpr_coefficients(boost.output_freq_hz);
     boost_enter_stop();
 
     if (HAL_ADC_Start_IT(&hadc1) != HAL_OK) {
@@ -291,13 +350,42 @@ void Boost_SetCurrentLimit(float i_limit)
     boost.i_limit = clampf(i_limit, IOUT_LIMIT_MIN, IOUT_LIMIT_MAX);
 }
 
+void Boost_SetOutputFrequency(float freq_hz)
+{
+    float new_freq = clampf(freq_hz, INV_OUTPUT_FREQ_MIN_HZ, INV_OUTPUT_FREQ_MAX_HZ);
+
+    if (new_freq != boost.output_freq_hz) {
+        boost.output_freq_hz = new_freq;
+        update_qpr_coefficients(new_freq);
+        clear_qpr_history();
+    }
+}
+
 void Boost_ControlLoop(void)
 {
     update_measurements();
 
+    if (boost.run_state == BOOST_STATE_FAULT) {
+        inverter_shutdown();
+        if (overcurrent_cleared()) {
+            boost.fault_recover_ticks++;
+            if (boost.fault_recover_ticks >= BOOST_FAULT_RECOVER_TICKS) {
+                boost_enter_arming();
+            }
+        } else {
+            boost.fault_recover_ticks = 0U;
+        }
+        return;
+    }
+
     if (boost.run_state == BOOST_STATE_STOPPED) {
         boost.v_target_active_rms = 0.0f;
         inverter_shutdown();
+        return;
+    }
+
+    if (overcurrent_active()) {
+        boost_enter_fault();
         return;
     }
 
@@ -317,7 +405,7 @@ void Boost_ControlLoop(void)
     update_soft_start();
 
     uint8_t phase_wrapped = 0U;
-    boost.phase += INV_TWO_PI * INV_OUTPUT_FREQ_HZ * INV_CONTROL_TS;
+    boost.phase += INV_TWO_PI * boost.output_freq_hz * INV_CONTROL_TS;
     if (boost.phase >= INV_TWO_PI) {
         boost.phase -= INV_TWO_PI;
         phase_wrapped = 1U;
@@ -384,10 +472,12 @@ void Boost_KeyScan(void)
             if (boost.run_state == BOOST_STATE_STOPPED) {
                 boost.cal_mode = BOOST_CAL_NONE;
             }
+            boost.edit_mode = BOOST_EDIT_FREQUENCY;
         } else if (key == 'D') {
             boost.cal_mode = BOOST_CAL_NONE;
             if (boost.run_state == BOOST_STATE_RUNNING ||
-                boost.run_state == BOOST_STATE_ARMING) {
+                boost.run_state == BOOST_STATE_ARMING ||
+                boost.run_state == BOOST_STATE_FAULT) {
                 boost_enter_stop();
             } else {
                 boost_enter_arming();
@@ -397,6 +487,8 @@ void Boost_KeyScan(void)
                 adjust_current_cal_bias(SAMPLE_BIAS_STEP);
             } else if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
                 Boost_SetTarget(boost.v_target_rms + VAC_TARGET_STEP);
+            } else if (boost.edit_mode == BOOST_EDIT_FREQUENCY) {
+                Boost_SetOutputFrequency(boost.output_freq_hz + INV_OUTPUT_FREQ_STEP_HZ);
             } else {
                 Boost_SetCurrentLimit(boost.i_limit + IOUT_LIMIT_STEP);
             }
@@ -405,6 +497,8 @@ void Boost_KeyScan(void)
                 adjust_current_cal_bias(-SAMPLE_BIAS_STEP);
             } else if (boost.edit_mode == BOOST_EDIT_VOLTAGE) {
                 Boost_SetTarget(boost.v_target_rms - VAC_TARGET_STEP);
+            } else if (boost.edit_mode == BOOST_EDIT_FREQUENCY) {
+                Boost_SetOutputFrequency(boost.output_freq_hz - INV_OUTPUT_FREQ_STEP_HZ);
             } else {
                 Boost_SetCurrentLimit(boost.i_limit - IOUT_LIMIT_STEP);
             }
@@ -419,6 +513,7 @@ float Boost_GetVout(void) { return boost.v_out; }
 float Boost_GetIout(void) { return boost.i_out; }
 float Boost_GetIin(void) { return boost.i_in; }
 float Boost_GetCurrentLimit(void) { return boost.i_limit; }
+float Boost_GetOutputFrequency(void) { return boost.output_freq_hz; }
 float Boost_GetDuty(void) { return boost.modulation_peak; }
 Boost_EditMode_t Boost_GetEditMode(void) { return boost.edit_mode; }
 Boost_RunState_t Boost_GetRunState(void) { return boost.run_state; }

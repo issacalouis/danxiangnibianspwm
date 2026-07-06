@@ -69,7 +69,7 @@ void SystemClock_Config(void);
 
     Boost_Init();
     Boost_SetTarget(VAC_TARGET_DEFAULT);
-    Boost_SetCurrentLimit(1.6f);
+    Boost_SetCurrentLimit(IOUT_LIMIT_DEFAULT);
 }
     void MX_USER_Loop(void)
   {
@@ -95,6 +95,7 @@ void SystemClock_Config(void);
             OLED_BoostUI(
                 Boost_GetTarget(),
                 Boost_GetCurrentLimit(),
+                Boost_GetOutputFrequency(),
                 Boost_GetVout(),
                 Boost_GetIout(),
                 Boost_GetIin(),

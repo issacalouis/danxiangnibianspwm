@@ -264,35 +264,41 @@ void OLED_DrawRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t fill)
 /* ============================================================
  *  OLED_BoostUI  -  Inverter control interface
  * ============================================================ */
-void OLED_BoostUI(float v_target, float i_limit, float v_out, float i_out, float i_in, float modulation, uint8_t edit_mode, uint8_t run_state)
+void OLED_BoostUI(float v_target, float i_limit, float output_freq_hz, float v_out, float i_out, float i_in, float modulation, uint8_t edit_mode, uint8_t run_state)
 {
+    (void)i_in;
     OLED_Clear();
 
-    if (run_state == 2U) {
+    if (run_state == 3U) {
+        OLED_ShowString(0, 0, "OC", 16);
+    } else if (run_state == 2U) {
         OLED_ShowString(0, 0, "RUN", 16);
     } else if (run_state == 1U) {
         OLED_ShowString(0, 0, "ARM", 16);
     } else {
         OLED_ShowString(0, 0, "STOP", 16);
     }
+
     if (edit_mode == 0U) {
         OLED_ShowString(72, 0, "SET V", 16);
+    } else if (edit_mode == 2U) {
+        OLED_ShowString(72, 0, "SET F", 16);
     } else {
         OLED_ShowString(72, 0, "SET I", 16);
     }
 
     OLED_ShowString(0, 16, "SV:", 16);
     OLED_ShowFloat(24, 16, v_target, 1, 16);
-    OLED_ShowString(72, 16, "LI:", 16);
-    OLED_ShowFloat(96, 16, i_limit, 1, 16);
+    OLED_ShowString(72, 16, "F:", 16);
+    OLED_ShowFloat(96, 16, output_freq_hz, 0, 16);
 
     OLED_ShowString(0, 32, "V:", 16);
     OLED_ShowFloat(16, 32, v_out, 1, 16);
     OLED_ShowString(64, 32, "Io:", 16);
     OLED_ShowFloat(88, 32, i_out, 1, 16);
 
-    OLED_ShowString(0, 48, "Ii:", 16);
-    OLED_ShowFloat(24, 48, i_in, 1, 16);
+    OLED_ShowString(0, 48, "LI:", 16);
+    OLED_ShowFloat(24, 48, i_limit, 1, 16);
     OLED_ShowString(72, 48, "M:", 16);
     OLED_ShowFloat(88, 48, modulation, 2, 16);
 

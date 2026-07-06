@@ -20,7 +20,10 @@
 
 #define INV_CONTROL_RATE_HZ         (20000.0f)
 #define INV_CONTROL_TS              (1.0f / INV_CONTROL_RATE_HZ)
-#define INV_OUTPUT_FREQ_HZ          (50.0f)
+#define INV_OUTPUT_FREQ_DEFAULT_HZ  (50.0f)
+#define INV_OUTPUT_FREQ_MIN_HZ      (20.0f)
+#define INV_OUTPUT_FREQ_MAX_HZ      (100.0f)
+#define INV_OUTPUT_FREQ_STEP_HZ     (5.0f)
 #define INV_TWO_PI                  (6.28318530718f)
 #define INV_SQRT2                   (1.41421356237f)
 
@@ -43,7 +46,7 @@
 #define OUTPUT_C_F                  (0.000010f)
 
 #define BOOST_SOFT_START_V_PER_S    (20.0f)
-#define BOOST_MODULATION_MAX        (0.85f)
+#define BOOST_MODULATION_MAX        (0.99f)
 #define BOOST_MODULATION_SOFT_START_PER_S (1.8f)
 #define BOOST_OUTER_INTEGRATOR_MAX  (10.0f)
 #define BOOST_INNER_INTEGRATOR_MAX  (20.0f)
@@ -65,23 +68,27 @@
 
 #define VAC_TARGET_DEFAULT          (5.0f)
 #define VAC_TARGET_MIN              (0.0f)
-#define VAC_TARGET_MAX              (8.0f)
-#define VAC_TARGET_STEP             (0.5f)
+#define VAC_TARGET_MAX              (20.0f)
+#define VAC_TARGET_STEP             (0.1f)
 
-#define IOUT_LIMIT_DEFAULT          (1.6f)
+#define IOUT_LIMIT_DEFAULT          (1.5f)
 #define IOUT_LIMIT_MIN              (0.2f)
-#define IOUT_LIMIT_MAX              (10.0f)
-#define IOUT_LIMIT_STEP             (0.2f)
+#define IOUT_LIMIT_MAX              (1.5f)
+#define IOUT_LIMIT_STEP             (0.1f)
+#define IOUT_RECOVER_HYSTERESIS_A   (0.2f)
+#define BOOST_FAULT_RECOVER_TICKS   (1000U)
 
 typedef enum {
     BOOST_EDIT_VOLTAGE = 0,
     BOOST_EDIT_CURRENT = 1,
+    BOOST_EDIT_FREQUENCY = 2,
 } Boost_EditMode_t;
 
 typedef enum {
     BOOST_STATE_STOPPED = 0,
     BOOST_STATE_ARMING = 1,
     BOOST_STATE_RUNNING = 2,
+    BOOST_STATE_FAULT = 3,
 } Boost_RunState_t;
 
 typedef enum {
@@ -95,6 +102,7 @@ typedef struct {
     float v_target_rms;
     float v_target_active_rms;
     float i_limit;
+    float output_freq_hz;
     float v_ref;
     float v_out;
     float v_out_raw;
@@ -113,6 +121,11 @@ typedef struct {
     float qpr_e2;
     float qpr_y1;
     float qpr_y2;
+    float qpr_b0;
+    float qpr_b1;
+    float qpr_b2;
+    float qpr_a1;
+    float qpr_a2;
     float phase;
     float modulation;
     float modulation_limit;
@@ -121,6 +134,7 @@ typedef struct {
     float duty_a;
     float duty_b;
     uint32_t arming_ticks;
+    uint32_t fault_recover_ticks;
     Boost_EditMode_t edit_mode;
     Boost_RunState_t run_state;
     Boost_CalMode_t cal_mode;
@@ -140,6 +154,7 @@ extern ADC_HandleTypeDef hadc3;
 void Boost_Init(void);
 void Boost_SetTarget(float v_target_rms);
 void Boost_SetCurrentLimit(float i_limit);
+void Boost_SetOutputFrequency(float freq_hz);
 void Boost_ControlLoop(void);
 void Boost_KeyScan(void);
 float Boost_GetTarget(void);
@@ -147,6 +162,7 @@ float Boost_GetVout(void);
 float Boost_GetIout(void);
 float Boost_GetIin(void);
 float Boost_GetCurrentLimit(void);
+float Boost_GetOutputFrequency(void);
 float Boost_GetDuty(void);
 Boost_EditMode_t Boost_GetEditMode(void);
 Boost_RunState_t Boost_GetRunState(void);
