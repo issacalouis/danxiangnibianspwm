@@ -18,7 +18,7 @@
 #define INV_DUTY_MAX                (0.98f)
 #define INV_DUTY_CENTER             (0.50f)
 
-#define INV_CONTROL_RATE_HZ         (40000.0f)
+#define INV_CONTROL_RATE_HZ         (20000.0f)
 #define INV_CONTROL_TS              (1.0f / INV_CONTROL_RATE_HZ)
 #define INV_OUTPUT_FREQ_HZ          (50.0f)
 #define INV_TWO_PI                  (6.28318530718f)
@@ -27,7 +27,7 @@
 #define ADC_VREF                    (3.3f)
 #define ADC_RESOLUTION              (4095.0f)
 #define SAMPLE_BIAS_STEP            (0.0001f)
-#define ADC_FILTER_ALPHA            (0.04f)
+#define ADC_FILTER_ALPHA            (0.08f)
 
 #define XTQ3_PID1_P                 (0.03115f)
 #define XTQ3_PID1_I                 (21.0f)
@@ -51,11 +51,11 @@
 #define BOOST_QPR_KP                (0.02f)
 #define BOOST_QPR_KR                (0.80f)
 #define BOOST_QPR_BANDWIDTH_HZ      (5.0f)
-#define BOOST_QPR_B0                (0.0006278158f)
+#define BOOST_QPR_B0                (0.0012545890f)
 #define BOOST_QPR_B1                (0.0f)
-#define BOOST_QPR_B2                (-0.0006278158f)
-#define BOOST_QPR_A1                (-1.9983688249f)
-#define BOOST_QPR_A2                (0.9984304606f)
+#define BOOST_QPR_B2                (-0.0012545890f)
+#define BOOST_QPR_A1                (-1.9966171896f)
+#define BOOST_QPR_A2                (0.9968635276f)
 #define BOOST_QPR_RESONANT_MAX_V    (1.2f)
 #define BOOST_QPR_IOUT_DAMPING_V_PER_A (0.20f)
 
