@@ -329,7 +329,8 @@ void Boost_ControlLoop(void)
     float resonant = qpr_resonant_predict(v_err);
     float inverter_voltage_cmd = boost.v_ref
                                + BOOST_QPR_KP * v_err
-                               + resonant;
+                               + resonant
+                               - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out;
     float modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
     float active_modulation_limit = clampf(boost.modulation_limit,
                                            0.0f,
@@ -347,7 +348,8 @@ void Boost_ControlLoop(void)
         resonant = boost.qpr_y1;
         inverter_voltage_cmd = boost.v_ref
                              + BOOST_QPR_KP * v_err
-                             + resonant;
+                             + resonant
+                             - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out;
         modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
         modulation = clampf(modulation_unclamped,
                             -active_modulation_limit,
