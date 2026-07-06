@@ -33,8 +33,8 @@
 #define XTQ3_PID1_I                 (21.0f)
 #define XTQ3_PID2_P                 (27.066f)
 #define XTQ3_PID2_I                 (6.67f)
-#define XTQ3_VOLTAGE_BIAS           (1.72f)
-#define XTQ3_CURRENT_BIAS           (1.72f)
+#define XTQ3_VOLTAGE_BIAS           (1.6900f)
+#define XTQ3_CURRENT_BIAS           (1.6900f)
 #define XTQ3_VOLTAGE_GAIN           (55.8f)
 #define XTQ3_CURRENT_GAIN           (2.828f)
 #define XTQ3_VBUS_NORM              (18.0f)
@@ -47,6 +47,16 @@
 #define BOOST_MODULATION_SOFT_START_PER_S (1.8f)
 #define BOOST_OUTER_INTEGRATOR_MAX  (10.0f)
 #define BOOST_INNER_INTEGRATOR_MAX  (20.0f)
+
+#define BOOST_QPR_KP                (0.20f)
+#define BOOST_QPR_KR                (3.00f)
+#define BOOST_QPR_BANDWIDTH_HZ      (5.0f)
+#define BOOST_QPR_B0                (0.0047047086f)
+#define BOOST_QPR_B1                (0.0f)
+#define BOOST_QPR_B2                (-0.0047047086f)
+#define BOOST_QPR_A1                (-1.9966171896f)
+#define BOOST_QPR_A2                (0.9968635276f)
+#define BOOST_QPR_RESONANT_MAX_V    (6.0f)
 
 #define BOOST_ARMING_TICKS          (1000U)
 #define BOOST_ARMING_V_MAX          (5.0f)
@@ -98,6 +108,10 @@ typedef struct {
     float inner_integrator;
     float outer_output;
     float inner_error;
+    float qpr_e1;
+    float qpr_e2;
+    float qpr_y1;
+    float qpr_y2;
     float phase;
     float modulation;
     float modulation_limit;

@@ -21,6 +21,10 @@ Boost_t boost = {
     .inner_integrator = 0.0f,
     .outer_output = 0.0f,
     .inner_error = 0.0f,
+    .qpr_e1 = 0.0f,
+    .qpr_e2 = 0.0f,
+    .qpr_y1 = 0.0f,
+    .qpr_y2 = 0.0f,
     .phase = 0.0f,
     .modulation = 0.0f,
     .modulation_limit = 0.0f,
@@ -66,6 +70,10 @@ static void reset_control_state(void)
     boost.inner_integrator = 0.0f;
     boost.outer_output = 0.0f;
     boost.inner_error = 0.0f;
+    boost.qpr_e1 = 0.0f;
+    boost.qpr_e2 = 0.0f;
+    boost.qpr_y1 = 0.0f;
+    boost.qpr_y2 = 0.0f;
     boost.phase = 0.0f;
     boost.modulation = 0.0f;
     boost.modulation_limit = 0.0f;
@@ -139,6 +147,27 @@ static void update_measurements(void)
     boost.v_out += ADC_FILTER_ALPHA * (boost.v_out_raw - boost.v_out);
     boost.i_out += ADC_FILTER_ALPHA * (boost.i_out_raw - boost.i_out);
     boost.i_in += ADC_FILTER_ALPHA * (boost.i_in_raw - boost.i_in);
+}
+
+static float qpr_resonant_predict(float error)
+{
+    float resonant = BOOST_QPR_B0 * error
+                   + BOOST_QPR_B1 * boost.qpr_e1
+                   + BOOST_QPR_B2 * boost.qpr_e2
+                   - BOOST_QPR_A1 * boost.qpr_y1
+                   - BOOST_QPR_A2 * boost.qpr_y2;
+
+    return clampf(resonant,
+                  -BOOST_QPR_RESONANT_MAX_V,
+                  BOOST_QPR_RESONANT_MAX_V);
+}
+
+static void qpr_resonant_commit(float error, float resonant)
+{
+    boost.qpr_e2 = boost.qpr_e1;
+    boost.qpr_e1 = error;
+    boost.qpr_y2 = boost.qpr_y1;
+    boost.qpr_y1 = resonant;
 }
 
 static void update_soft_start(void)
@@ -297,12 +326,10 @@ void Boost_ControlLoop(void)
     boost.v_ref = boost.v_target_active_rms * INV_SQRT2 * sinf(boost.phase);
 
     float v_err = boost.v_ref - boost.v_out;
-    boost.outer_output = XTQ3_PID1_P * v_err + boost.outer_integrator;
-    boost.inner_error = boost.outer_output + boost.i_in - boost.i_out;
-
-    float inverter_voltage_cmd = XTQ3_PID2_P * boost.inner_error
-                               + boost.inner_integrator
-                               + boost.v_out;
+    float resonant = qpr_resonant_predict(v_err);
+    float inverter_voltage_cmd = boost.v_ref
+                               + BOOST_QPR_KP * v_err
+                               + resonant;
     float modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
     float active_modulation_limit = clampf(boost.modulation_limit,
                                            0.0f,
@@ -311,33 +338,32 @@ void Boost_ControlLoop(void)
                               -active_modulation_limit,
                               active_modulation_limit);
 
+    uint8_t high_saturated = (modulation_unclamped > active_modulation_limit) ? 1U : 0U;
+    uint8_t low_saturated = (modulation_unclamped < -active_modulation_limit) ? 1U : 0U;
+    uint8_t hold_resonant = ((high_saturated && v_err > 0.0f) ||
+                             (low_saturated && v_err < 0.0f)) ? 1U : 0U;
+
+    if (hold_resonant) {
+        resonant = boost.qpr_y1;
+        inverter_voltage_cmd = boost.v_ref
+                             + BOOST_QPR_KP * v_err
+                             + resonant;
+        modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
+        modulation = clampf(modulation_unclamped,
+                            -active_modulation_limit,
+                            active_modulation_limit);
+    } else {
+        qpr_resonant_commit(v_err, resonant);
+    }
+
+    boost.outer_output = BOOST_QPR_KP * v_err + resonant;
+    boost.inner_error = 0.0f;
     boost.modulation = modulation;
     update_modulation_peak(modulation, phase_wrapped);
 
     float duty_a = spwm_triangle_cut_duty(modulation);
     float duty_b = spwm_triangle_cut_duty(-modulation);
     pwm_write(duty_a, duty_b);
-
-    uint8_t high_saturated = (modulation_unclamped > active_modulation_limit) ? 1U : 0U;
-    uint8_t low_saturated = (modulation_unclamped < -active_modulation_limit) ? 1U : 0U;
-    uint8_t hold_inner_integrator = ((high_saturated && boost.inner_error > 0.0f) ||
-                                     (low_saturated && boost.inner_error < 0.0f)) ? 1U : 0U;
-    uint8_t hold_outer_integrator = ((high_saturated && v_err > 0.0f) ||
-                                     (low_saturated && v_err < 0.0f)) ? 1U : 0U;
-
-    if (!hold_outer_integrator) {
-        boost.outer_integrator += XTQ3_PID1_I * v_err * INV_CONTROL_TS;
-        boost.outer_integrator = clampf(boost.outer_integrator,
-                                        -BOOST_OUTER_INTEGRATOR_MAX,
-                                        BOOST_OUTER_INTEGRATOR_MAX);
-    }
-
-    if (!hold_inner_integrator) {
-        boost.inner_integrator += XTQ3_PID2_I * boost.inner_error * INV_CONTROL_TS;
-        boost.inner_integrator = clampf(boost.inner_integrator,
-                                        -BOOST_INNER_INTEGRATOR_MAX,
-                                        BOOST_INNER_INTEGRATOR_MAX);
-    }
 }
 
 void Boost_KeyScan(void)
