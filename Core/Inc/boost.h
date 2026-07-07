@@ -5,7 +5,9 @@
 #include <stdint.h>
 
 /* ============================================================
- * Single-phase inverter control ported from Simulink/C2000 xtq3
+ * Single-phase inverter control using SPWM plus a QPR voltage loop.
+ * The QPR resonant term is frequency-tracked and the command includes
+ * output-current damping before modulation is limited against XTQ3_VBUS_NORM.
  *
  * PWM bridge A : TIM1_CH1  -> PE9, TIM1_CH1N -> PA7
  * PWM bridge B : TIM8_CH2  -> PC7, TIM8_CH2N -> PB0
@@ -30,8 +32,9 @@
 #define ADC_VREF                    (3.3f)
 #define ADC_RESOLUTION              (4095.0f)
 #define SAMPLE_BIAS_STEP            (0.0001f)
-#define ADC_FILTER_ALPHA            (0.08f)
+#define ADC_FILTER_ALPHA            (0.05f)
 
+/* Legacy xtq3 PI constants kept for traceability; the active loop uses BOOST_QPR_* below. */
 #define XTQ3_PID1_P                 (0.03115f)
 #define XTQ3_PID1_I                 (21.0f)
 #define XTQ3_PID2_P                 (27.066f)
@@ -51,8 +54,9 @@
 #define BOOST_OUTER_INTEGRATOR_MAX  (10.0f)
 #define BOOST_INNER_INTEGRATOR_MAX  (20.0f)
 
-#define BOOST_QPR_KP                (0.02f)
+#define BOOST_QPR_KP                (0.012f)
 #define BOOST_QPR_KR                (0.80f)
+#define BOOST_QPR_ERROR_DEADBAND_V  (0.05f)
 #define BOOST_QPR_BANDWIDTH_HZ      (5.0f)
 #define BOOST_QPR_B0                (0.0012545890f)
 #define BOOST_QPR_B1                (0.0f)
@@ -61,6 +65,10 @@
 #define BOOST_QPR_A2                (0.9968635276f)
 #define BOOST_QPR_RESONANT_MAX_V    (1.2f)
 #define BOOST_QPR_IOUT_DAMPING_V_PER_A (0.20f)
+
+#define BOOST_DEADTIME_COMP_MODULATION (0.0f)
+#define BOOST_DEADTIME_COMP_I_THRESHOLD_A (0.05f)
+#define BOOST_DEADTIME_COMP_POLARITY (1.0f)
 
 #define BOOST_ARMING_TICKS          (1000U)
 #define BOOST_ARMING_V_MAX          (5.0f)

@@ -31,3 +31,5 @@ No consistent commit convention is visible in this workspace, so use concise imp
 ## Agent-Specific Instructions
 
 Do not overwrite user changes or regenerate CubeMX files unless explicitly requested. Prefer edits inside application modules and `USER CODE` regions. Before changing control-loop constants, state the target hardware assumptions and the exact files/defines being changed.
+
+After changing firmware behavior, control parameters, pin mappings, UI text, calibration assumptions, or protection logic, update the related documentation in the same change, especially `USER_MANUAL.md` when user-facing behavior changes.

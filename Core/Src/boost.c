@@ -97,6 +97,27 @@ static float spwm_triangle_cut_duty(float modulation_ref)
     return INV_DUTY_CENTER + 0.5f * modulation_ref;
 }
 
+static float deadtime_compensation_modulation(void)
+{
+    if (BOOST_DEADTIME_COMP_MODULATION <= 0.0f) return 0.0f;
+    if (boost.i_out > BOOST_DEADTIME_COMP_I_THRESHOLD_A) {
+        return BOOST_DEADTIME_COMP_POLARITY * BOOST_DEADTIME_COMP_MODULATION;
+    }
+    if (boost.i_out < -BOOST_DEADTIME_COMP_I_THRESHOLD_A) {
+        return -BOOST_DEADTIME_COMP_POLARITY * BOOST_DEADTIME_COMP_MODULATION;
+    }
+    return 0.0f;
+}
+
+static void validate_ripple_tuning(void)
+{
+    if (BOOST_DEADTIME_COMP_MODULATION < 0.0f ||
+        BOOST_DEADTIME_COMP_MODULATION > 0.05f ||
+        BOOST_DEADTIME_COMP_I_THRESHOLD_A < 0.0f) {
+        Error_Handler();
+    }
+}
+
 static void pwm_write(float duty_a, float duty_b)
 {
     uint32_t arr1 = __HAL_TIM_GET_AUTORELOAD(&htim1);
@@ -112,7 +133,7 @@ static void pwm_write(float duty_a, float duty_b)
                           (uint32_t)(duty_a * (float)(arr1 + 1U)));
     __HAL_TIM_SET_COMPARE(&htim8, TIM_CHANNEL_2,
                           (uint32_t)(duty_b * (float)(arr8 + 1U)));
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, (arr1 + 1U) / 2U);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, ((arr1 + 1U) * 85U) / 100U);
 }
 
 static void inverter_shutdown(void)
@@ -305,6 +326,7 @@ static void next_cal_mode(void)
 
 void Boost_Init(void)
 {
+    validate_ripple_tuning();
     update_qpr_coefficients(boost.output_freq_hz);
     boost_enter_stop();
 
@@ -415,9 +437,11 @@ void Boost_ControlLoop(void)
     boost.v_ref = boost.v_target_active_rms * INV_SQRT2 * sinf(boost.phase);
 
     float v_err = boost.v_ref - boost.v_out;
-    float resonant = qpr_resonant_predict(v_err);
+    uint8_t error_deadbanded = (fabsf(v_err) < BOOST_QPR_ERROR_DEADBAND_V) ? 1U : 0U;
+    float control_v_err = error_deadbanded ? 0.0f : v_err;
+    float resonant = error_deadbanded ? boost.qpr_y1 : qpr_resonant_predict(control_v_err);
     float inverter_voltage_cmd = boost.v_ref
-                               + BOOST_QPR_KP * v_err
+                               + BOOST_QPR_KP * control_v_err
                                + resonant
                                - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out;
     float modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
@@ -430,13 +454,13 @@ void Boost_ControlLoop(void)
 
     uint8_t high_saturated = (modulation_unclamped > active_modulation_limit) ? 1U : 0U;
     uint8_t low_saturated = (modulation_unclamped < -active_modulation_limit) ? 1U : 0U;
-    uint8_t hold_resonant = ((high_saturated && v_err > 0.0f) ||
-                             (low_saturated && v_err < 0.0f)) ? 1U : 0U;
+    uint8_t hold_resonant = ((high_saturated && control_v_err > 0.0f) ||
+                             (low_saturated && control_v_err < 0.0f)) ? 1U : 0U;
 
-    if (hold_resonant) {
+    if (hold_resonant || error_deadbanded) {
         resonant = boost.qpr_y1;
         inverter_voltage_cmd = boost.v_ref
-                             + BOOST_QPR_KP * v_err
+                             + BOOST_QPR_KP * control_v_err
                              + resonant
                              - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out;
         modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
@@ -444,16 +468,21 @@ void Boost_ControlLoop(void)
                             -active_modulation_limit,
                             active_modulation_limit);
     } else {
-        qpr_resonant_commit(v_err, resonant);
+        qpr_resonant_commit(control_v_err, resonant);
     }
 
-    boost.outer_output = BOOST_QPR_KP * v_err + resonant;
+    boost.outer_output = BOOST_QPR_KP * control_v_err + resonant;
     boost.inner_error = 0.0f;
-    boost.modulation = modulation;
-    update_modulation_peak(modulation, phase_wrapped);
+    /* ponytail: sign-only dead-time feedforward; upgrade to a calibrated table if bench data says polarity or magnitude is load-dependent. */
+    float compensated_modulation = clampf(modulation + deadtime_compensation_modulation(),
+                                          -active_modulation_limit,
+                                          active_modulation_limit);
 
-    float duty_a = spwm_triangle_cut_duty(modulation);
-    float duty_b = spwm_triangle_cut_duty(-modulation);
+    boost.modulation = compensated_modulation;
+    update_modulation_peak(compensated_modulation, phase_wrapped);
+
+    float duty_a = spwm_triangle_cut_duty(compensated_modulation);
+    float duty_b = spwm_triangle_cut_duty(-compensated_modulation);
     pwm_write(duty_a, duty_b);
 }
 

@@ -23,6 +23,9 @@
 /* USER CODE BEGIN 0 */
 #include "gpio.h"
 #include "boost.h"
+
+/* ponytail: fixed hardware dead-time; tune per gate driver before raising bus voltage. */
+#define INVERTER_PWM_DEADTIME_TICKS (84U) /* ~1 us at 168 MHz TIM1/TIM8, CKD=DIV2. */
 /* USER CODE END 0 */
 
 TIM_HandleTypeDef htim1;
@@ -83,7 +86,7 @@ void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sConfigOC.Pulse = (htim1.Init.Period + 1) / 2;
+  sConfigOC.Pulse = ((htim1.Init.Period + 1) * 85) / 100;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
@@ -91,7 +94,7 @@ void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 84;
+  sBreakDeadTimeConfig.DeadTime = INVERTER_PWM_DEADTIME_TICKS;
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
@@ -194,7 +197,7 @@ void MX_TIM8_Init(void)
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 84;
+  sBreakDeadTimeConfig.DeadTime = INVERTER_PWM_DEADTIME_TICKS;
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
