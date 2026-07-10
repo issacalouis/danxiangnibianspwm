@@ -38,17 +38,16 @@
 #define SAMPLE_GAIN_MIN             (0.0f)
 #define SAMPLE_GAIN_MAX             (200.0f)
 #define ADC_FILTER_ALPHA            (0.25f)
-#define RMS_FILTER_ALPHA            (0.001f)
 
 /* Legacy xtq3 PI constants kept for traceability; the active loop uses BOOST_QPR_* below. */
 #define XTQ3_PID1_P                 (0.03115f)
 #define XTQ3_PID1_I                 (21.0f)
 #define XTQ3_PID2_P                 (27.066f)
 #define XTQ3_PID2_I                 (6.67f)
-#define XTQ3_VOLTAGE_BIAS           (1.7000f)
-#define XTQ3_CURRENT_BIAS           (1.6900f)
-#define XTQ3_VOLTAGE_GAIN           (60.0f)
-#define XTQ3_CURRENT_GAIN           (2.828f)
+#define XTQ3_VOLTAGE_BIAS           (1.7200f)
+#define XTQ3_CURRENT_BIAS           (1.8722f)
+#define XTQ3_VOLTAGE_GAIN           (63.2f)
+#define XTQ3_CURRENT_GAIN           (4.30f)
 #define XTQ3_VBUS_NORM              (36.0f)
 
 #define OUTPUT_L_H                  (0.001f)
@@ -71,9 +70,9 @@
 #define BOOST_QPR_A2                (0.9968635276f)
 #define BOOST_QPR_RESONANT_MAX_V    (1.8f)
 #define BOOST_QPR_IOUT_DAMPING_V_PER_A (0.20f)
-#define BOOST_RMS_TRIM_KP           (0.07f)
-#define BOOST_RMS_TRIM_KI           (2.5f)
-#define BOOST_RMS_TRIM_MAX_VRMS     (2.5f)
+#define BOOST_RMS_TRIM_KP           (0.06f)
+#define BOOST_RMS_TRIM_KI           (2.0f)
+#define BOOST_RMS_TRIM_MAX_VRMS     (2.2f)
 #define BOOST_RMS_TRIM_ENABLE_VRMS  (0.5f)
 #define BOOST_RMS_TRIM_SOFTSTART_ERR_VRMS (0.05f)
 #define BOOST_RMS_TRIM_MOD_MARGIN   (0.02f)
@@ -128,10 +127,13 @@ typedef struct {
     float v_out_raw;
     float v_rms;
     float v_rms_sq;
+    uint32_t rms_sample_count;
     float i_out;
     float i_out_raw;
     float i_rms;
     float i_rms_sq;
+    uint8_t rms_valid;
+    uint8_t rms_sync_pending;
     float i_in;
     float i_in_raw;
     float v_sample_bias;

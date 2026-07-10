@@ -44,7 +44,7 @@ v_ref = SV_active * sqrt(2) * sin(phase);
 v_err = v_ref - v_out;      // QPR waveform loop uses filtered instantaneous sample
 control_v_err = (abs(v_err) < 0.05V) ? 0 : v_err;
 resonant = deadbanded ? resonant_last : QPR(control_v_err);
-rms_trim = PI(SV_active - Vrms);  // RMS loop uses filtered RMS
+rms_trim = PI(SV_active - Vrms);  // RMS loop uses whole-cycle RMS
 feedforward = (SV_active + rms_trim) * sqrt(2) * sin(phase);
 inverter_voltage_cmd = feedforward + KP * control_v_err + resonant - iout_damping * i_out;
 M = clamp(inverter_voltage_cmd / 36.0, -modulation_limit, modulation_limit);
@@ -58,7 +58,7 @@ duty_b = 0.5 - 0.5 * M_comp;
 - 输出频率可在 `20Hz ~ 100Hz` 范围内步进调整，默认 `50Hz`。
 - QPR 谐振系数会跟随输出频率重算；示波器若看到的是开关沿附近尖峰/振铃，优先按开关瞬态和周期级抖动处理。当前 `BOOST_QPR_KP = 0.012`，`BOOST_QPR_KR = 0.80`，`BOOST_QPR_RESONANT_MAX_V = 1.8V`，误差死区 `BOOST_QPR_ERROR_DEADBAND_V = 0.05V`。
 - PWM 输出使用 TIM1/TIM8 硬件互补 PWM，载波保持 `20kHz`。TIM1 作为载波和 ADC 触发主定时器，TIM8 由 TIM1 触发复位同步；ADC 仍由 `TIM1_CC2` 触发，采样点设在约 `85%` PWM 周期位置，用于避开疑似开关沿噪声。
-- ADC_FILTER_ALPHA=0.25，电压/电流瞬时一阶滤波启用，用于 QPR/比例波形环、输出电流阻尼、RMS 显示、Irms 过流和 RMS 幅值外环，避免开关采样尖峰直接进入控制量。OLED 主界面显示的 Vr/Ir 为 RMS 值，使用滤波后的瞬时值平方后再由 RMS_FILTER_ALPHA=0.001 做均值低通。慢速 RMS 幅值外环使用 SV_active - Vrms 修正前馈幅值：KP=0.07、KI=2.5、最大修正 2.5Vrms。死区误差补偿默认启用，BOOST_DEADTIME_COMP_MODULATION=0.007。
+- ADC_FILTER_ALPHA=0.25，电压/电流瞬时一阶滤波启用，用于 QPR/比例波形环、输出电流阻尼、整周期 RMS 显示、Irms 过流和 RMS 幅值外环，避免开关采样尖峰直接进入控制量。OLED 主界面显示的 Vr/Ir 为按输出相位整周期计算的 RMS 值；频率改变后会等待一个完整新周期再恢复 RMS 外环积分。慢速 RMS 幅值外环使用 SV_active - Vrms 修正前馈幅值：KP=0.06、KI=2.0、最大修正 2.2Vrms。死区误差补偿默认启用，BOOST_DEADTIME_COMP_MODULATION=0.007。
 - OLED 的 `M` 显示为最近一个输出周期内的补偿后调制峰值，避免瞬时过零时长期显示 `0.00`。
 
 ## 5. 上电与运行流程
@@ -81,8 +81,8 @@ duty_b = 0.5 - 0.5 * M_comp;
 | `SV` | 输出电压目标，单位按 RMS 理解 |
 | `F` | 输出频率 |
 | `LI` | 输出过流保护阈值 |
-| Vr | 输出电压 RMS，来自输出电压瞬时值的平方均值低通 |
-| Ir | 输出电流 RMS，来自输出电流瞬时值的平方均值低通 |
+| Vr | 输出电压 RMS，来自滤波瞬时电压的整输出周期平方均值 |
+| Ir | 输出电流 RMS，来自滤波瞬时电流的整输出周期平方均值 |
 | `Ii` | 输入电流采样换算值，来自 PC0 |
 | M | 最近一个输出周期内的调制峰值，用于观察是否接近饱和 |
 
@@ -161,7 +161,7 @@ make -j16 all
 
 ### 当前控制逻辑
 
-- RUN 状态下实际执行 QPR 电压环 + 输出电流阻尼 + RMS 幅值外环 + SPWM。QPR 波形环和输出电流阻尼使用滤波后的瞬时采样，RMS 幅值外环用滤波 RMS。
+- RUN 状态下实际执行 QPR 电压环 + 输出电流阻尼 + RMS 幅值外环 + SPWM。QPR 波形环和输出电流阻尼使用滤波后的瞬时采样，RMS 幅值外环用整周期 RMS。
 - QPR 谐振系数会跟随输出频率重算，调制量按固定归一化母线 `XTQ3_VBUS_NORM = 36V` 限幅。
 - STOP、ARM 和 OC 故障态保持 50%/50% 中点 PWM，等效关闭有效调制，但不是关断栅极驱动。
 - TIM1_CH1/CH1N 与 TIM8_CH2/CH2N 使用高级定时器硬件互补输出，BDTR 死区为 84 tick，按当前 168MHz 定时器且 CKD=DIV2 约 1us；TIM1 输出更新 TRGO，TIM8 使用 TIM1 ITR0 复位同步；上功率前需用示波器确认栅极波形。
@@ -175,11 +175,11 @@ make -j16 all
 - 可调范围：`20Hz ~ 100Hz`。
 - 步进值：`5Hz`，满足“步进值不大于 5Hz”的要求。
 - 按键操作：按 `#` 进入 `SET F` 频率编辑模式，按 `1` 增加 5Hz，按 `2` 减少 5Hz。
-- 频率改变时，程序会同步重算 QPR 谐振控制器系数，使谐振中心跟随目标输出频率，而不是继续固定在 50Hz。
+- 频率改变时，程序会同步重算 QPR 谐振控制器系数，并重启整周期 RMS 累加；RMS 外环等待一个完整新周期后再恢复积分。
 
 ### Vrms / Irms 计算方式
 
-采样中断里先把 ADC 原始值换算成瞬时电压/电流，再做一阶瞬时滤波，再用滤波后的瞬时值计算 RMS：
+采样中断里先把 ADC 原始值换算成瞬时电压/电流，再做一阶瞬时滤波；RUN 状态下按输出相位整周期累加滤波瞬时值的平方，并在相位换周时提交 RMS：
 
 ```c
 v_inst = (Vadc - v_bias) * v_gain;
@@ -188,14 +188,17 @@ i_inst = (Iadc - iout_bias) * iout_gain;
 v_f += ADC_FILTER_ALPHA * (v_inst - v_f);
 i_f += ADC_FILTER_ALPHA * (i_inst - i_f);
 
-v_rms_sq += RMS_FILTER_ALPHA * (v_f * v_f - v_rms_sq);
-i_rms_sq += RMS_FILTER_ALPHA * (i_f * i_f - i_rms_sq);
+v_sq_sum += v_f * v_f;
+i_sq_sum += i_f * i_f;
+sample_count++;
 
-Vrms = sqrt(v_rms_sq);
-Irms = sqrt(i_rms_sq);
+if (phase_wrapped) {
+    Vrms = sqrt(v_sq_sum / sample_count);
+    Irms = sqrt(i_sq_sum / sample_count);
+}
 ```
 
-其中 v_f/i_f 是滤波后的瞬时量，v_rms_sq/i_rms_sq 是平方值的低通均值。这个算法是指数滑动 RMS，不是严格整周期窗口 RMS，显示会比瞬时值更稳。RMS 幅值外环使用这个 Vrms 来缓慢修正前馈幅值，使输出 RMS 接近 SV。
+其中 v_f/i_f 是滤波后的瞬时量。这个算法是整输出周期 RMS，不再使用固定 `RMS_FILTER_ALPHA` 指数滑动均值，因此不同输出频率下反馈窗口随基波周期同步。RMS 幅值外环使用这个 Vrms 来缓慢修正前馈幅值；频率改变后先等待一个完整新周期，再恢复积分。
 
 ### 采样偏置与比例可调
 
@@ -206,8 +209,8 @@ Irms = sqrt(i_rms_sq);
 
 ### 输出过流保护与自动恢复
 
-- 输出过流保护量：Ir = boost.i_rms，由 ADC2_CH14 / PC4 的滤波后输出电流计算得到。
-- 保护判断使用低通后的输出电流 RMS：Ir。
+- 输出过流保护量：Ir = boost.i_rms，由 ADC2_CH14 / PC4 的滤波后输出电流按整周期 RMS 计算得到。
+- 保护判断优先使用整周期输出电流 RMS；改频等待新 RMS 时沿用上一周期 Ir，启动初期或故障态没有有效 RMS 时才使用滤波瞬时输出电流绝对值兜底。
 - 默认过流动作阈值：`2.5A`。
 - `LI` 作为输出过流保护阈值显示和设置项，允许调低做安全测试，但最大值被限制为 `2.5A`。
 - 当 `Ir >= LI` 时，控制进入 `BOOST_STATE_FAULT`，OLED 显示 `OC`，PWM 输出回到中点并关闭有效调制。

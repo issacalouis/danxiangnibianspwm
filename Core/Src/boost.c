@@ -13,10 +13,13 @@ Boost_t boost = {
     .v_out_raw = 0.0f,
     .v_rms = 0.0f,
     .v_rms_sq = 0.0f,
+    .rms_sample_count = 0U,
     .i_out = 0.0f,
     .i_out_raw = 0.0f,
     .i_rms = 0.0f,
     .i_rms_sq = 0.0f,
+    .rms_valid = 0U,
+    .rms_sync_pending = 0U,
     .i_in = 0.0f,
     .i_in_raw = 0.0f,
     .v_sample_bias = XTQ3_VOLTAGE_BIAS,
@@ -95,12 +98,31 @@ static void reset_control_state(void)
     boost.modulation_peak_work = 0.0f;
 }
 
+static void clear_rms_accumulator(void)
+{
+    boost.v_rms_sq = 0.0f;
+    boost.i_rms_sq = 0.0f;
+    boost.rms_sample_count = 0U;
+}
+
+static void reset_rms_accumulator(void)
+{
+    clear_rms_accumulator();
+    boost.rms_valid = 0U;
+    boost.rms_sync_pending = 0U;
+}
+
+static void resync_rms_accumulator(void)
+{
+    reset_rms_accumulator();
+    boost.rms_sync_pending = 1U;
+}
+
 static void reset_rms_state(void)
 {
     boost.v_rms = 0.0f;
-    boost.v_rms_sq = 0.0f;
     boost.i_rms = 0.0f;
-    boost.i_rms_sq = 0.0f;
+    reset_rms_accumulator();
 }
 
 static float spwm_triangle_cut_duty(float modulation_ref)
@@ -210,6 +232,7 @@ static void boost_enter_fault(void)
     boost.arming_ticks = 0U;
     boost.fault_recover_ticks = 0U;
     inverter_shutdown();
+    reset_rms_accumulator();
 }
 
 static void update_measurements(void)
@@ -222,10 +245,32 @@ static void update_measurements(void)
     boost.i_out += ADC_FILTER_ALPHA * (boost.i_out_raw - boost.i_out);
     boost.i_in += ADC_FILTER_ALPHA * (boost.i_in_raw - boost.i_in);
 
-    boost.v_rms_sq += RMS_FILTER_ALPHA * ((boost.v_out * boost.v_out) - boost.v_rms_sq);
-    boost.i_rms_sq += RMS_FILTER_ALPHA * ((boost.i_out * boost.i_out) - boost.i_rms_sq);
-    boost.v_rms = sqrtf((boost.v_rms_sq > 0.0f) ? boost.v_rms_sq : 0.0f);
-    boost.i_rms = sqrtf((boost.i_rms_sq > 0.0f) ? boost.i_rms_sq : 0.0f);
+    if (boost.run_state == BOOST_STATE_RUNNING) {
+        boost.v_rms_sq += boost.v_out * boost.v_out;
+        boost.i_rms_sq += boost.i_out * boost.i_out;
+        if (boost.rms_sample_count < 0xFFFFFFFFU) {
+            boost.rms_sample_count++;
+        }
+    }
+}
+
+static void commit_rms_accumulator(void)
+{
+    if (boost.rms_sync_pending) {
+        clear_rms_accumulator();
+        boost.rms_sync_pending = 0U;
+        return;
+    }
+    if (boost.rms_sample_count == 0U) return;
+
+    float inv_count = 1.0f / (float)boost.rms_sample_count;
+    float v_rms_sq = boost.v_rms_sq * inv_count;
+    float i_rms_sq = boost.i_rms_sq * inv_count;
+
+    boost.v_rms = sqrtf((v_rms_sq > 0.0f) ? v_rms_sq : 0.0f);
+    boost.i_rms = sqrtf((i_rms_sq > 0.0f) ? i_rms_sq : 0.0f);
+    clear_rms_accumulator();
+    boost.rms_valid = 1U;
 }
 
 static void clear_qpr_history(void)
@@ -253,9 +298,18 @@ static void update_qpr_coefficients(float frequency_hz)
     boost.qpr_a2 = (4.0f - 4.0f * wc * t + w0t2) / den;
 }
 
+static float output_current_protection_value(void)
+{
+    if (boost.rms_valid ||
+        (boost.run_state == BOOST_STATE_RUNNING && boost.i_rms > 0.0f)) {
+        return boost.i_rms;
+    }
+    return fabsf(boost.i_out);
+}
+
 static uint8_t overcurrent_active(void)
 {
-    return (boost.i_rms >= boost.i_limit) ? 1U : 0U;
+    return (output_current_protection_value() >= boost.i_limit) ? 1U : 0U;
 }
 
 static uint8_t overcurrent_cleared(void)
@@ -264,7 +318,7 @@ static uint8_t overcurrent_cleared(void)
     if (recover_level < IOUT_LIMIT_MIN) {
         recover_level = IOUT_LIMIT_MIN;
     }
-    return (boost.i_rms <= recover_level) ? 1U : 0U;
+    return (output_current_protection_value() <= recover_level) ? 1U : 0U;
 }
 
 static float qpr_resonant_predict(float error)
@@ -435,6 +489,7 @@ void Boost_SetOutputFrequency(float freq_hz)
         boost.output_freq_hz = new_freq;
         update_qpr_coefficients(new_freq);
         clear_qpr_history();
+        resync_rms_accumulator();
     }
 }
 
@@ -486,6 +541,7 @@ void Boost_ControlLoop(void)
     if (boost.phase >= INV_TWO_PI) {
         boost.phase -= INV_TWO_PI;
         phase_wrapped = 1U;
+        commit_rms_accumulator();
     }
 
     float phase_sin = sinf(boost.phase);
@@ -495,15 +551,19 @@ void Boost_ControlLoop(void)
                                            0.0f,
                                            BOOST_MODULATION_MAX);
     float rms_error = boost.v_target_active_rms - boost.v_rms;
-    uint8_t rms_trim_enabled = (boost.v_target_active_rms >= BOOST_RMS_TRIM_ENABLE_VRMS &&
-                                fabsf(boost.v_target_rms - boost.v_target_active_rms) <= BOOST_RMS_TRIM_SOFTSTART_ERR_VRMS) ? 1U : 0U;
-    if (rms_trim_enabled) {
-        uint8_t can_integrate = (boost.modulation_peak < (BOOST_MODULATION_MAX - BOOST_RMS_TRIM_MOD_MARGIN) ||
-                                 rms_error < 0.0f) ? 1U : 0U;
-        if (can_integrate) {
-            boost.outer_integrator = clampf(boost.outer_integrator + BOOST_RMS_TRIM_KI * rms_error * INV_CONTROL_TS,
-                                            -BOOST_RMS_TRIM_MAX_VRMS,
-                                            BOOST_RMS_TRIM_MAX_VRMS);
+    uint8_t rms_trim_target_ready = (boost.v_target_active_rms >= BOOST_RMS_TRIM_ENABLE_VRMS &&
+                                     fabsf(boost.v_target_rms - boost.v_target_active_rms) <= BOOST_RMS_TRIM_SOFTSTART_ERR_VRMS) ? 1U : 0U;
+    if (rms_trim_target_ready) {
+        if (boost.rms_valid) {
+            uint8_t can_integrate = (boost.modulation_peak < (BOOST_MODULATION_MAX - BOOST_RMS_TRIM_MOD_MARGIN) ||
+                                     rms_error < 0.0f) ? 1U : 0U;
+            if (can_integrate) {
+                boost.outer_integrator = clampf(boost.outer_integrator + BOOST_RMS_TRIM_KI * rms_error * INV_CONTROL_TS,
+                                                -BOOST_RMS_TRIM_MAX_VRMS,
+                                                BOOST_RMS_TRIM_MAX_VRMS);
+            }
+        } else {
+            rms_error = 0.0f;
         }
     } else {
         boost.outer_integrator = 0.0f;
