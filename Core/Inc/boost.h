@@ -8,6 +8,8 @@
  * Single-phase inverter control using SPWM plus a QPR voltage loop.
  * The QPR resonant term is frequency-tracked and the command includes
  * output-current damping before modulation is limited against XTQ3_VBUS_NORM.
+ * TIM1 is used as the PWM/ADC timing master and TIM8 is reset-synchronized
+ * from TIM1 so the two bridge legs keep a fixed carrier phase.
  *
  * PWM bridge A : TIM1_CH1  -> PE9, TIM1_CH1N -> PA7
  * PWM bridge B : TIM8_CH2  -> PC7, TIM8_CH2N -> PB0
@@ -25,7 +27,7 @@
 #define INV_OUTPUT_FREQ_DEFAULT_HZ  (50.0f)
 #define INV_OUTPUT_FREQ_MIN_HZ      (20.0f)
 #define INV_OUTPUT_FREQ_MAX_HZ      (100.0f)
-#define INV_OUTPUT_FREQ_STEP_HZ     (5.0f)
+#define INV_OUTPUT_FREQ_STEP_HZ     (1.0f)
 #define INV_TWO_PI                  (6.28318530718f)
 #define INV_SQRT2                   (1.41421356237f)
 
@@ -43,9 +45,9 @@
 #define XTQ3_PID1_I                 (21.0f)
 #define XTQ3_PID2_P                 (27.066f)
 #define XTQ3_PID2_I                 (6.67f)
-#define XTQ3_VOLTAGE_BIAS           (1.6900f)
+#define XTQ3_VOLTAGE_BIAS           (1.7300f)
 #define XTQ3_CURRENT_BIAS           (1.6900f)
-#define XTQ3_VOLTAGE_GAIN           (55.8f)
+#define XTQ3_VOLTAGE_GAIN           (60.0f)
 #define XTQ3_CURRENT_GAIN           (2.828f)
 #define XTQ3_VBUS_NORM              (36.0f)
 
@@ -67,16 +69,16 @@
 #define BOOST_QPR_B2                (-0.0012545890f)
 #define BOOST_QPR_A1                (-1.9966171896f)
 #define BOOST_QPR_A2                (0.9968635276f)
-#define BOOST_QPR_RESONANT_MAX_V    (1.2f)
+#define BOOST_QPR_RESONANT_MAX_V    (3.0f)
 #define BOOST_QPR_IOUT_DAMPING_V_PER_A (0.20f)
-#define BOOST_RMS_TRIM_KP           (0.05f)
-#define BOOST_RMS_TRIM_KI           (1.0f)
-#define BOOST_RMS_TRIM_MAX_VRMS     (2.0f)
+#define BOOST_RMS_TRIM_KP           (0.10f)
+#define BOOST_RMS_TRIM_KI           (4.0f)
+#define BOOST_RMS_TRIM_MAX_VRMS     (5.0f)
 #define BOOST_RMS_TRIM_ENABLE_VRMS  (0.5f)
 #define BOOST_RMS_TRIM_SOFTSTART_ERR_VRMS (0.05f)
 #define BOOST_RMS_TRIM_MOD_MARGIN   (0.02f)
 
-#define BOOST_DEADTIME_COMP_MODULATION (0.0f)
+#define BOOST_DEADTIME_COMP_MODULATION (0.015f)
 #define BOOST_DEADTIME_COMP_I_THRESHOLD_A (0.05f)
 #define BOOST_DEADTIME_COMP_POLARITY (1.0f)
 
@@ -199,3 +201,4 @@ float Boost_GetCalGain(void);
 float Boost_GetCalValue(void);
 
 #endif /* __BOOST_H */
+

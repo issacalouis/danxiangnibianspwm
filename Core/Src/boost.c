@@ -133,6 +133,24 @@ static void validate_ripple_tuning(void)
     }
 }
 
+static void configure_pwm_timer_sync(void)
+{
+    TIM_MasterConfigTypeDef master_config = {0};
+    TIM_SlaveConfigTypeDef slave_config = {0};
+
+    master_config.MasterOutputTrigger = TIM_TRGO_UPDATE;
+    master_config.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
+    if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &master_config) != HAL_OK) {
+        Error_Handler();
+    }
+
+    slave_config.SlaveMode = TIM_SLAVEMODE_RESET;
+    slave_config.InputTrigger = TIM_TS_ITR0;
+    if (HAL_TIM_SlaveConfigSynchro(&htim8, &slave_config) != HAL_OK) {
+        Error_Handler();
+    }
+}
+
 static void pwm_write(float duty_a, float duty_b)
 {
     uint32_t arr1 = __HAL_TIM_GET_AUTORELOAD(&htim1);
@@ -375,9 +393,16 @@ void Boost_Init(void)
         Error_Handler();
     }
 
+    configure_pwm_timer_sync();
     __HAL_TIM_SET_COUNTER(&htim1, 0U);
     __HAL_TIM_SET_COUNTER(&htim8, 0U);
 
+    if (HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2) != HAL_OK) {
+        Error_Handler();
+    }
+    if (HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_2) != HAL_OK) {
+        Error_Handler();
+    }
     if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) {
         Error_Handler();
     }
@@ -385,12 +410,6 @@ void Boost_Init(void)
         Error_Handler();
     }
     if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) {
-        Error_Handler();
-    }
-    if (HAL_TIM_PWM_Start(&htim8, TIM_CHANNEL_2) != HAL_OK) {
-        Error_Handler();
-    }
-    if (HAL_TIMEx_PWMN_Start(&htim8, TIM_CHANNEL_2) != HAL_OK) {
         Error_Handler();
     }
     if (HAL_TIM_Base_Start_IT(&htim6) != HAL_OK) {
@@ -499,14 +518,14 @@ void Boost_ControlLoop(void)
                                    VAC_TARGET_MAX);
     float feedforward_ref = feedforward_rms * INV_SQRT2 * phase_sin;
 
-    float v_err = boost.v_ref - boost.v_out_raw;
+    float v_err = boost.v_ref - boost.v_out;
     uint8_t error_deadbanded = (fabsf(v_err) < BOOST_QPR_ERROR_DEADBAND_V) ? 1U : 0U;
     float control_v_err = error_deadbanded ? 0.0f : v_err;
     float resonant = error_deadbanded ? boost.qpr_y1 : qpr_resonant_predict(control_v_err);
     float inverter_voltage_cmd = feedforward_ref
                                + BOOST_QPR_KP * control_v_err
                                + resonant
-                               - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out_raw;
+                               - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out;
     float modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
     float modulation = clampf(modulation_unclamped,
                               -active_modulation_limit,
@@ -522,7 +541,7 @@ void Boost_ControlLoop(void)
         inverter_voltage_cmd = feedforward_ref
                              + BOOST_QPR_KP * control_v_err
                              + resonant
-                             - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out_raw;
+                             - BOOST_QPR_IOUT_DAMPING_V_PER_A * boost.i_out;
         modulation_unclamped = inverter_voltage_cmd / XTQ3_VBUS_NORM;
         modulation = clampf(modulation_unclamped,
                             -active_modulation_limit,

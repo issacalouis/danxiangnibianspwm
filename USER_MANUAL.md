@@ -41,12 +41,12 @@ RUN 状态下执行 QPR 电压环 + 输出电流阻尼 + SPWM：
 
 ```c
 v_ref = SV_active * sqrt(2) * sin(phase);
-v_err = v_ref - v_out_raw;  // QPR waveform loop uses unfiltered instantaneous sample
+v_err = v_ref - v_out;      // QPR waveform loop uses filtered instantaneous sample
 control_v_err = (abs(v_err) < 0.05V) ? 0 : v_err;
 resonant = deadbanded ? resonant_last : QPR(control_v_err);
 rms_trim = PI(SV_active - Vrms);  // RMS loop uses filtered RMS
 feedforward = (SV_active + rms_trim) * sqrt(2) * sin(phase);
-inverter_voltage_cmd = feedforward + KP * control_v_err + resonant - iout_damping * i_out_raw;
+inverter_voltage_cmd = feedforward + KP * control_v_err + resonant - iout_damping * i_out;
 M = clamp(inverter_voltage_cmd / 36.0, -modulation_limit, modulation_limit);
 M_comp = clamp(M + deadtime_compensation(Io), -modulation_limit, modulation_limit);
 duty_a = 0.5 + 0.5 * M_comp;
@@ -56,9 +56,9 @@ duty_b = 0.5 - 0.5 * M_comp;
 说明：
 
 - 输出频率可在 `20Hz ~ 100Hz` 范围内步进调整，默认 `50Hz`。
-- QPR 谐振系数会跟随输出频率重算；示波器若看到的是开关沿附近尖峰/振铃，优先按开关瞬态和周期级抖动处理。当前 `BOOST_QPR_KP = 0.012`，`BOOST_QPR_KR = 0.80`，误差死区 `BOOST_QPR_ERROR_DEADBAND_V = 0.05V`。
-- PWM 输出使用 TIM1/TIM8 硬件互补 PWM，载波保持 `20kHz`。ADC 仍由 `TIM1_CC2` 触发，采样点设在约 `85%` PWM 周期位置，用于避开疑似开关沿噪声。
-- ADC_FILTER_ALPHA=0.25，电压/电流瞬时一阶滤波启用，用于 RMS 显示、Irms 过流和 RMS 幅值外环；QPR/比例波形环使用未滤波的 v_out_raw，输出电流阻尼使用未滤波的 i_out_raw。OLED 主界面显示的 Vr/Ir 为 RMS 值，使用滤波后的瞬时值平方后再由 RMS_FILTER_ALPHA=0.001 做均值低通。慢速 RMS 幅值外环使用 SV_active - Vrms 修正前馈幅值：KP=0.05、KI=1.0、最大修正 2Vrms。死区误差补偿代码已保留，但默认补偿量为 0.0，等效关闭。
+- QPR 谐振系数会跟随输出频率重算；示波器若看到的是开关沿附近尖峰/振铃，优先按开关瞬态和周期级抖动处理。当前 `BOOST_QPR_KP = 0.012`，`BOOST_QPR_KR = 0.80`，`BOOST_QPR_RESONANT_MAX_V = 3.0V`，误差死区 `BOOST_QPR_ERROR_DEADBAND_V = 0.05V`。
+- PWM 输出使用 TIM1/TIM8 硬件互补 PWM，载波保持 `20kHz`。TIM1 作为载波和 ADC 触发主定时器，TIM8 由 TIM1 触发复位同步；ADC 仍由 `TIM1_CC2` 触发，采样点设在约 `85%` PWM 周期位置，用于避开疑似开关沿噪声。
+- ADC_FILTER_ALPHA=0.25，电压/电流瞬时一阶滤波启用，用于 QPR/比例波形环、输出电流阻尼、RMS 显示、Irms 过流和 RMS 幅值外环，避免开关采样尖峰直接进入控制量。OLED 主界面显示的 Vr/Ir 为 RMS 值，使用滤波后的瞬时值平方后再由 RMS_FILTER_ALPHA=0.001 做均值低通。慢速 RMS 幅值外环使用 SV_active - Vrms 修正前馈幅值：KP=0.10、KI=4.0、最大修正 5Vrms。死区误差补偿默认启用，BOOST_DEADTIME_COMP_MODULATION=0.015。
 - OLED 的 `M` 显示为最近一个输出周期内的补偿后调制峰值，避免瞬时过零时长期显示 `0.00`。
 
 ## 5. 上电与运行流程
@@ -117,7 +117,7 @@ duty_b = 0.5 - 0.5 * M_comp;
 1. 保持 `STOP`，确认 `Vr/Ir/Ii` 零输入接近 0。
 2. 若零点不准，按 `C` 进入对应校准界面，用 `1/2` 调整偏置；若比例不准，在同一校准界面用 `A/B` 按 `0.1` 步进调整比例。
 3. 示波器测 PE9/PA7、PC7/PB0，确认 `STOP` 下中心占空比和互补输出正常。
-4. 确认 TIM1/TIM8 仍为 `20kHz`，死区约 `1us`，ADC 触发点在约 `85%` PWM 周期位置，并相对主要开关沿移开。
+4. 确认 TIM1/TIM8 仍为 `20kHz` 且载波同步，死区约 `1us`，ADC 触发点在约 `85%` PWM 周期位置，并相对主要开关沿移开。
 5. 确认死区补偿前后过零附近输出电压畸变、电流尖峰和器件温升没有变差。
 6. 将 `SV` 降到较低值，按 `D` 进入 `ARM/RUN`。
 7. 观察 `M` 是否从小值随软启动上升，不应直接长时间顶到上限。
@@ -130,7 +130,7 @@ duty_b = 0.5 - 0.5 * M_comp;
 | 零输入时 `Vr/Ir/Ii` 不接近 0 | 采样偏置不准 | 在 `STOP` 下用校准界面调整偏置 |
 | 实测电压/电流与显示成比例偏差 | 采样比例不准 | 在 `STOP` 下进入对应 `CAL` 页面，用 `A/B` 调整 `GAIN` |
 | 按 `D` 后停在 `ARM` | 启动自检未通过 | 检查零点、采样线和噪声 |
-| RUN 后 M 长期接近上限 | 目标过高、母线不足、负载过重或采样极性错误 | 降低 SV，限流低压重新测 |
+| RUN 后 M 长期接近上限 | 目标过高、母线不足、负载过重、有效输出损失过大或采样极性错误 | 降低 SV，确认 36V 母线、TIM1/TIM8 同步和死区补偿后再测 |
 | 输出端几乎无电压 | PWM 未到驱动、驱动未使能或功率路径断开 | 先用示波器逐点测 PE9/PA7/PC7/PB0 和驱动输出 |
 | 输出波形异常 | 采样极性、桥臂接线、LC 接线或驱动死区问题 | 断开负载，逐项确认硬件路径 |
 | 相邻 PWM 周期占空比轻微跳动 | ADC 采到开关尖峰、QPR 对噪声过度反应或误差极限环 | 先确认 TIM1_CC2 触发点，再小幅调整 ADC_FILTER_ALPHA、BOOST_QPR_KP 和误差死区；不要把 ADC_FILTER_ALPHA 调得过小以免基波相位滞后 |
@@ -161,11 +161,11 @@ make -j16 all
 
 ### 当前控制逻辑
 
-- RUN 状态下实际执行 QPR 电压环 + 输出电流阻尼 + RMS 幅值外环 + SPWM。QPR 波形环用未滤波瞬时采样，RMS 幅值外环用滤波 RMS。
+- RUN 状态下实际执行 QPR 电压环 + 输出电流阻尼 + RMS 幅值外环 + SPWM。QPR 波形环和输出电流阻尼使用滤波后的瞬时采样，RMS 幅值外环用滤波 RMS。
 - QPR 谐振系数会跟随输出频率重算，调制量按固定归一化母线 `XTQ3_VBUS_NORM = 36V` 限幅。
 - STOP、ARM 和 OC 故障态保持 50%/50% 中点 PWM，等效关闭有效调制，但不是关断栅极驱动。
-- TIM1_CH1/CH1N 与 TIM8_CH2/CH2N 使用高级定时器硬件互补输出，BDTR 死区为 84 tick，按当前 168MHz 定时器且 CKD=DIV2 约 1us；上功率前需用示波器确认栅极波形。
-- 载波频率保持 `20kHz` 不变；固件保留基于 `Io` 极性的死区误差前馈补偿入口，但当前默认关闭，避免补偿方向错误导致波形异常。
+- TIM1_CH1/CH1N 与 TIM8_CH2/CH2N 使用高级定时器硬件互补输出，BDTR 死区为 84 tick，按当前 168MHz 定时器且 CKD=DIV2 约 1us；TIM1 输出更新 TRGO，TIM8 使用 TIM1 ITR0 复位同步；上功率前需用示波器确认栅极波形。
+- 载波频率保持 `20kHz` 不变；基于 `Io` 极性的死区误差前馈补偿默认启用，补偿量为 `0.015` 调制深度，用于改善 2A 带载下的有效输出损失。
 - 若补偿后电压尖峰、电流毛刺、噪声或温升变差，应先把 `BOOST_DEADTIME_COMP_MODULATION` 调为 `0.0f` 回退补偿，再继续检查硬件波形。
 
 ### 输出频率可步进调整
