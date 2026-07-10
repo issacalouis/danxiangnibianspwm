@@ -16,6 +16,8 @@ make -j16 clean
 
 `make -j16 all` builds `FULL.elf`, `FULL.map`, and `FULL.list`. `make -j16 clean` removes generated objects and build outputs. If CubeMX regenerates files, review changes inside `USER CODE BEGIN/END` blocks carefully.
 
+Agents should not run the firmware build by default in this workspace. The local shell environment may lack STM32 toolchain helpers such as `arm-none-eabi-size` even when source compilation succeeds, and build attempts can touch generated files under `Debug/`. Leave build execution to the user unless they explicitly ask for it.
+
 ## Coding Style & Naming Conventions
 
 Use C11-compatible C and the STM32 HAL style already present in the project. Keep four-space indentation for new application logic, avoid tabs in new code, and keep comments short and technical. Use `MX_*` names for Cube-generated initialization, `HAL_*` callbacks for HAL hooks, and module-prefixed names such as `Boost_*`, `OLED_*`, or `IMU_*` for application APIs. Keep hardware constants in headers such as `Core/Inc/boost.h`.
@@ -33,3 +35,7 @@ No consistent commit convention is visible in this workspace, so use concise imp
 Do not overwrite user changes or regenerate CubeMX files unless explicitly requested. Prefer edits inside application modules and `USER CODE` regions. Before changing control-loop constants, state the target hardware assumptions and the exact files/defines being changed.
 
 After changing firmware behavior, control parameters, pin mappings, UI text, calibration assumptions, or protection logic, update the related documentation in the same change, especially `USER_MANUAL.md` when user-facing behavior changes.
+
+`USER_MANUAL.md` is UTF-8 Markdown with Chinese text. When editing it or any other non-ASCII documentation, preserve UTF-8 encoding, avoid ANSI/GBK/default-codepage rewrites, and self-check with a UTF-8 read such as `Get-Content -Encoding UTF8 USER_MANUAL.md` plus `git diff` for mojibake before finishing.
+
+For firmware changes, prefer static review and focused source checks. Do not run `Debug/make`, `mingw32-make`, or equivalent build commands unless the user explicitly requests a build; the user will compile and flash on their configured STM32 environment.

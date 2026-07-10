@@ -11,9 +11,9 @@
  *
  * PWM bridge A : TIM1_CH1  -> PE9, TIM1_CH1N -> PA7
  * PWM bridge B : TIM8_CH2  -> PC7, TIM8_CH2N -> PB0
- * ADC output V : ADC1_CH5  -> PA5, V = (Vadc - v_bias) * 55.8
- * ADC output I : ADC2_CH14 -> PC4, I = (Vadc - iout_bias) * 2.828
- * ADC input  I : ADC3_CH10 -> PC0, I = (Vadc - iin_bias) * 2.828
+ * ADC output V : ADC1_CH5  -> PA5, V = (Vadc - v_bias) * v_gain
+ * ADC output I : ADC2_CH14 -> PC4, I = (Vadc - iout_bias) * iout_gain
+ * ADC input  I : ADC3_CH10 -> PC0, I = (Vadc - iin_bias) * iin_gain
  * ============================================================ */
 
 #define INV_DUTY_MIN                (0.02f)
@@ -32,7 +32,11 @@
 #define ADC_VREF                    (3.3f)
 #define ADC_RESOLUTION              (4095.0f)
 #define SAMPLE_BIAS_STEP            (0.0001f)
-#define ADC_FILTER_ALPHA            (0.05f)
+#define SAMPLE_GAIN_STEP            (0.1f)
+#define SAMPLE_GAIN_MIN             (0.0f)
+#define SAMPLE_GAIN_MAX             (200.0f)
+#define ADC_FILTER_ALPHA            (0.25f)
+#define RMS_FILTER_ALPHA            (0.001f)
 
 /* Legacy xtq3 PI constants kept for traceability; the active loop uses BOOST_QPR_* below. */
 #define XTQ3_PID1_P                 (0.03115f)
@@ -43,7 +47,7 @@
 #define XTQ3_CURRENT_BIAS           (1.6900f)
 #define XTQ3_VOLTAGE_GAIN           (55.8f)
 #define XTQ3_CURRENT_GAIN           (2.828f)
-#define XTQ3_VBUS_NORM              (18.0f)
+#define XTQ3_VBUS_NORM              (36.0f)
 
 #define OUTPUT_L_H                  (0.001f)
 #define OUTPUT_C_F                  (0.000010f)
@@ -65,6 +69,12 @@
 #define BOOST_QPR_A2                (0.9968635276f)
 #define BOOST_QPR_RESONANT_MAX_V    (1.2f)
 #define BOOST_QPR_IOUT_DAMPING_V_PER_A (0.20f)
+#define BOOST_RMS_TRIM_KP           (0.10f)
+#define BOOST_RMS_TRIM_KI           (4.0f)
+#define BOOST_RMS_TRIM_MAX_VRMS     (5.0f)
+#define BOOST_RMS_TRIM_ENABLE_VRMS  (0.5f)
+#define BOOST_RMS_TRIM_SOFTSTART_ERR_VRMS (0.05f)
+#define BOOST_RMS_TRIM_MOD_MARGIN   (0.02f)
 
 #define BOOST_DEADTIME_COMP_MODULATION (0.0f)
 #define BOOST_DEADTIME_COMP_I_THRESHOLD_A (0.05f)
@@ -76,12 +86,12 @@
 
 #define VAC_TARGET_DEFAULT          (5.0f)
 #define VAC_TARGET_MIN              (0.0f)
-#define VAC_TARGET_MAX              (20.0f)
+#define VAC_TARGET_MAX              (26.0f)
 #define VAC_TARGET_STEP             (0.1f)
 
-#define IOUT_LIMIT_DEFAULT          (2.2f)
+#define IOUT_LIMIT_DEFAULT          (2.5f)
 #define IOUT_LIMIT_MIN              (0.2f)
-#define IOUT_LIMIT_MAX              (2.2f)
+#define IOUT_LIMIT_MAX              (2.5f)
 #define IOUT_LIMIT_STEP             (0.1f)
 #define IOUT_RECOVER_HYSTERESIS_A   (0.2f)
 #define BOOST_FAULT_RECOVER_TICKS   (1000U)
@@ -104,6 +114,9 @@ typedef enum {
     BOOST_CAL_VOLTAGE = 1,
     BOOST_CAL_IOUT = 2,
     BOOST_CAL_IIN = 3,
+    BOOST_CAL_VOLTAGE_GAIN = 4,
+    BOOST_CAL_IOUT_GAIN = 5,
+    BOOST_CAL_IIN_GAIN = 6,
 } Boost_CalMode_t;
 
 typedef struct {
@@ -114,13 +127,20 @@ typedef struct {
     float v_ref;
     float v_out;
     float v_out_raw;
+    float v_rms;
+    float v_rms_sq;
     float i_out;
     float i_out_raw;
+    float i_rms;
+    float i_rms_sq;
     float i_in;
     float i_in_raw;
     float v_sample_bias;
     float iout_sample_bias;
     float iin_sample_bias;
+    float v_sample_gain;
+    float iout_sample_gain;
+    float iin_sample_gain;
     float outer_integrator;
     float inner_integrator;
     float outer_output;
@@ -168,6 +188,8 @@ void Boost_KeyScan(void);
 float Boost_GetTarget(void);
 float Boost_GetVout(void);
 float Boost_GetIout(void);
+float Boost_GetVrms(void);
+float Boost_GetIrms(void);
 float Boost_GetIin(void);
 float Boost_GetCurrentLimit(void);
 float Boost_GetOutputFrequency(void);
