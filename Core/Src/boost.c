@@ -58,6 +58,19 @@ Boost_t boost = {
     .adc_iin_raw = 0U,
 };
 
+/* ------------------------------------------------------------
+ * RMS 测量精度改进（boost.c 内部状态，不改动 boost.h 接口）：
+ * 1) rms_gain_correction：一阶低通 ADC 滤波器在基波频率处的幅值衰减补偿，
+ *    消除高频段（100 Hz 处约 0.6%）的系统性 RMS 偏差；
+ * 2) rms_wraps_needed / rms_wrap_count：RMS 采用约 100 ms（整数个基波周期）
+ *    的多周期测量窗，抑制 20 kHz / f 非整数导致的单周期窗口量化误差。
+ * ------------------------------------------------------------ */
+#define BOOST_RMS_WINDOW_MIN_S      (0.1f)
+
+static float rms_gain_correction = 1.0f;
+static uint32_t rms_wraps_needed = 1U;
+static uint32_t rms_wrap_count = 0U;
+
 static float clampf(float value, float min_value, float max_value)
 {
     if (value > max_value) return max_value;
@@ -78,6 +91,23 @@ static float adc_to_voltage(uint32_t raw)
 static float adc_to_current(uint32_t raw, float bias, float gain)
 {
     return (adc_raw_to_vadc(raw) - bias) * gain;
+}
+
+/* 计算一阶低通 y += a*(x-y) 在基波频率处的幅值 |H|，
+ * RMS 结果乘以 1/|H| 得到滤波前的真实基波有效值；
+ * 同时按“窗口时长 >= BOOST_RMS_WINDOW_MIN_S 的整数个周期”确定测量窗。 */
+static void update_rms_compensation(float frequency_hz)
+{
+    float wt = INV_TWO_PI * frequency_hz * INV_CONTROL_TS;
+    float a = ADC_FILTER_ALPHA;
+    float b = 1.0f - a;
+    float mag_sq = 1.0f - 2.0f * b * cosf(wt) + b * b;
+    float mag = (mag_sq > 0.0f) ? (a / sqrtf(mag_sq)) : 1.0f;
+
+    rms_gain_correction = (mag > 1e-6f) ? (1.0f / mag) : 1.0f;
+
+    float wraps = ceilf(frequency_hz * BOOST_RMS_WINDOW_MIN_S);
+    rms_wraps_needed = (wraps < 1.0f) ? 1U : (uint32_t)wraps;
 }
 
 static void reset_control_state(void)
@@ -103,6 +133,7 @@ static void clear_rms_accumulator(void)
     boost.v_rms_sq = 0.0f;
     boost.i_rms_sq = 0.0f;
     boost.rms_sample_count = 0U;
+    rms_wrap_count = 0U;
 }
 
 static void reset_rms_accumulator(void)
@@ -223,6 +254,9 @@ static void boost_enter_run(void)
     boost.fault_recover_ticks = 0U;
     reset_control_state();
     reset_rms_state();
+    /* 关键改动：启动后第一段是不完整周期，标记为待同步，
+     * 在第一次相位回绕时丢弃，避免用半个周期的数据得到错误 RMS。 */
+    boost.rms_sync_pending = 1U;
 }
 
 static void boost_enter_fault(void)
@@ -254,6 +288,8 @@ static void update_measurements(void)
     }
 }
 
+/* 每次相位回绕调用一次；累计到 rms_wraps_needed 个整周期（约 100 ms 窗）
+ * 才提交一次 RMS，并用 rms_gain_correction 补偿 ADC 低通对基波的衰减。 */
 static void commit_rms_accumulator(void)
 {
     if (boost.rms_sync_pending) {
@@ -261,14 +297,21 @@ static void commit_rms_accumulator(void)
         boost.rms_sync_pending = 0U;
         return;
     }
-    if (boost.rms_sample_count == 0U) return;
+
+    rms_wrap_count++;
+    if (rms_wrap_count < rms_wraps_needed) return;
+
+    if (boost.rms_sample_count == 0U) {
+        clear_rms_accumulator();
+        return;
+    }
 
     float inv_count = 1.0f / (float)boost.rms_sample_count;
     float v_rms_sq = boost.v_rms_sq * inv_count;
     float i_rms_sq = boost.i_rms_sq * inv_count;
 
-    boost.v_rms = sqrtf((v_rms_sq > 0.0f) ? v_rms_sq : 0.0f);
-    boost.i_rms = sqrtf((i_rms_sq > 0.0f) ? i_rms_sq : 0.0f);
+    boost.v_rms = rms_gain_correction * sqrtf((v_rms_sq > 0.0f) ? v_rms_sq : 0.0f);
+    boost.i_rms = rms_gain_correction * sqrtf((i_rms_sq > 0.0f) ? i_rms_sq : 0.0f);
     clear_rms_accumulator();
     boost.rms_valid = 1U;
 }
@@ -435,6 +478,7 @@ void Boost_Init(void)
 {
     validate_ripple_tuning();
     update_qpr_coefficients(boost.output_freq_hz);
+    update_rms_compensation(boost.output_freq_hz);
     boost_enter_stop();
 
     if (HAL_ADC_Start_IT(&hadc1) != HAL_OK) {
@@ -488,6 +532,7 @@ void Boost_SetOutputFrequency(float freq_hz)
     if (new_freq != boost.output_freq_hz) {
         boost.output_freq_hz = new_freq;
         update_qpr_coefficients(new_freq);
+        update_rms_compensation(new_freq);
         clear_qpr_history();
         resync_rms_accumulator();
     }
@@ -575,7 +620,7 @@ void Boost_ControlLoop(void)
                             BOOST_RMS_TRIM_MAX_VRMS);
     float feedforward_rms = clampf(boost.v_target_active_rms + rms_trim,
                                    VAC_TARGET_MIN,
-                                   VAC_TARGET_MAX);
+                                   BOOST_FEEDFORWARD_MAX_VRMS);
     float feedforward_ref = feedforward_rms * INV_SQRT2 * phase_sin;
 
     float v_err = boost.v_ref - boost.v_out;
