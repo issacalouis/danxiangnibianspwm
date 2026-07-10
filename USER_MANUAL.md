@@ -56,9 +56,9 @@ duty_b = 0.5 - 0.5 * M_comp;
 说明：
 
 - 输出频率可在 `20Hz ~ 100Hz` 范围内步进调整，默认 `50Hz`。
-- QPR 谐振系数会跟随输出频率重算；示波器若看到的是开关沿附近尖峰/振铃，优先按开关瞬态和周期级抖动处理。当前 `BOOST_QPR_KP = 0.012`，`BOOST_QPR_KR = 0.80`，`BOOST_QPR_RESONANT_MAX_V = 3.0V`，误差死区 `BOOST_QPR_ERROR_DEADBAND_V = 0.05V`。
+- QPR 谐振系数会跟随输出频率重算；示波器若看到的是开关沿附近尖峰/振铃，优先按开关瞬态和周期级抖动处理。当前 `BOOST_QPR_KP = 0.012`，`BOOST_QPR_KR = 0.55`，`BOOST_QPR_RESONANT_MAX_V = 1.8V`，误差死区 `BOOST_QPR_ERROR_DEADBAND_V = 0.05V`。
 - PWM 输出使用 TIM1/TIM8 硬件互补 PWM，载波保持 `20kHz`。TIM1 作为载波和 ADC 触发主定时器，TIM8 由 TIM1 触发复位同步；ADC 仍由 `TIM1_CC2` 触发，采样点设在约 `85%` PWM 周期位置，用于避开疑似开关沿噪声。
-- ADC_FILTER_ALPHA=0.25，电压/电流瞬时一阶滤波启用，用于 QPR/比例波形环、输出电流阻尼、RMS 显示、Irms 过流和 RMS 幅值外环，避免开关采样尖峰直接进入控制量。OLED 主界面显示的 Vr/Ir 为 RMS 值，使用滤波后的瞬时值平方后再由 RMS_FILTER_ALPHA=0.001 做均值低通。慢速 RMS 幅值外环使用 SV_active - Vrms 修正前馈幅值：KP=0.10、KI=4.0、最大修正 5Vrms。死区误差补偿默认启用，BOOST_DEADTIME_COMP_MODULATION=0.015。
+- ADC_FILTER_ALPHA=0.25，电压/电流瞬时一阶滤波启用，用于 QPR/比例波形环、输出电流阻尼、RMS 显示、Irms 过流和 RMS 幅值外环，避免开关采样尖峰直接进入控制量。OLED 主界面显示的 Vr/Ir 为 RMS 值，使用滤波后的瞬时值平方后再由 RMS_FILTER_ALPHA=0.001 做均值低通。慢速 RMS 幅值外环使用 SV_active - Vrms 修正前馈幅值：KP=0.07、KI=2.5、最大修正 2.5Vrms。死区误差补偿默认启用，BOOST_DEADTIME_COMP_MODULATION=0.007。
 - OLED 的 `M` 显示为最近一个输出周期内的补偿后调制峰值，避免瞬时过零时长期显示 `0.00`。
 
 ## 5. 上电与运行流程
@@ -165,7 +165,7 @@ make -j16 all
 - QPR 谐振系数会跟随输出频率重算，调制量按固定归一化母线 `XTQ3_VBUS_NORM = 36V` 限幅。
 - STOP、ARM 和 OC 故障态保持 50%/50% 中点 PWM，等效关闭有效调制，但不是关断栅极驱动。
 - TIM1_CH1/CH1N 与 TIM8_CH2/CH2N 使用高级定时器硬件互补输出，BDTR 死区为 84 tick，按当前 168MHz 定时器且 CKD=DIV2 约 1us；TIM1 输出更新 TRGO，TIM8 使用 TIM1 ITR0 复位同步；上功率前需用示波器确认栅极波形。
-- 载波频率保持 `20kHz` 不变；基于 `Io` 极性的死区误差前馈补偿默认启用，补偿量为 `0.015` 调制深度，用于改善 2A 带载下的有效输出损失。
+- 载波频率保持 `20kHz` 不变；基于 `Io` 极性的死区误差前馈补偿默认启用，补偿量为 `0.007` 调制深度，用于改善 2A 带载下的有效输出损失。
 - 若补偿后电压尖峰、电流毛刺、噪声或温升变差，应先把 `BOOST_DEADTIME_COMP_MODULATION` 调为 `0.0f` 回退补偿，再继续检查硬件波形。
 
 ### 输出频率可步进调整
