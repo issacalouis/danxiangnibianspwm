@@ -79,9 +79,9 @@
 #define VAC_TARGET_MAX              (20.0f)
 #define VAC_TARGET_STEP             (0.1f)
 
-#define IOUT_LIMIT_DEFAULT          (1.5f)
+#define IOUT_LIMIT_DEFAULT          (2.2f)
 #define IOUT_LIMIT_MIN              (0.2f)
-#define IOUT_LIMIT_MAX              (1.5f)
+#define IOUT_LIMIT_MAX              (2.2f)
 #define IOUT_LIMIT_STEP             (0.1f)
 #define IOUT_RECOVER_HYSTERESIS_A   (0.2f)
 #define BOOST_FAULT_RECOVER_TICKS   (1000U)
