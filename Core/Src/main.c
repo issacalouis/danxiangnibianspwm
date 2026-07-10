@@ -89,6 +89,7 @@ void SystemClock_Config(void);
             OLED_BoostCalUI(
                 (uint8_t)Boost_GetCalMode(),
                 Boost_GetCalBias(),
+                Boost_GetCalGain(),
                 Boost_GetCalValue()
             );
         } else {

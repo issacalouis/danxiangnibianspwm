@@ -305,11 +305,9 @@ void OLED_BoostUI(float v_target, float i_limit, float output_freq_hz, float v_o
     OLED_Refresh();
 }
 
-void OLED_BoostCalUI(uint8_t cal_mode, float bias, float value)
+void OLED_BoostCalUI(uint8_t cal_mode, float bias, float gain, float value)
 {
     OLED_Clear();
-
-    uint8_t gain_mode = (cal_mode >= 4U && cal_mode <= 6U) ? 1U : 0U;
 
     if (cal_mode == 1U) {
         OLED_ShowString(0, 0, "CAL V", 16);
@@ -317,22 +315,17 @@ void OLED_BoostCalUI(uint8_t cal_mode, float bias, float value)
         OLED_ShowString(0, 0, "CAL IO", 16);
     } else if (cal_mode == 3U) {
         OLED_ShowString(0, 0, "CAL II", 16);
-    } else if (cal_mode == 4U) {
-        OLED_ShowString(0, 0, "CAL VG", 16);
-    } else if (cal_mode == 5U) {
-        OLED_ShowString(0, 0, "CAL IOG", 16);
-    } else if (cal_mode == 6U) {
-        OLED_ShowString(0, 0, "CAL IIG", 16);
     } else {
         OLED_ShowString(0, 0, "CAL", 16);
     }
 
-    OLED_ShowString(0, 16, gain_mode ? "GAIN:" : "BIAS:", 16);
-    OLED_ShowFloat(48, 16, bias, gain_mode ? 1 : 4, 16);
+    OLED_ShowString(0, 16, "BIAS:", 16);
+    OLED_ShowFloat(48, 16, bias, 4, 16);
 
-    OLED_ShowString(0, 32, "VAL:", 16);
-    OLED_ShowFloat(40, 32, value, 1, 16);
+    OLED_ShowString(0, 32, "GAIN:", 16);
+    OLED_ShowFloat(48, 32, gain, 1, 16);
 
-    OLED_ShowString(0, 48, gain_mode ? "1/2 GAIN" : "1/2 BIAS", 16);
+    OLED_ShowString(0, 48, "VAL:", 16);
+    OLED_ShowFloat(40, 48, value, 1, 16);
     OLED_Refresh();
 }

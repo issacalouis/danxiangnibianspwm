@@ -69,9 +69,9 @@
 #define BOOST_QPR_A2                (0.9968635276f)
 #define BOOST_QPR_RESONANT_MAX_V    (1.2f)
 #define BOOST_QPR_IOUT_DAMPING_V_PER_A (0.20f)
-#define BOOST_RMS_TRIM_KP           (0.10f)
-#define BOOST_RMS_TRIM_KI           (4.0f)
-#define BOOST_RMS_TRIM_MAX_VRMS     (5.0f)
+#define BOOST_RMS_TRIM_KP           (0.05f)
+#define BOOST_RMS_TRIM_KI           (1.0f)
+#define BOOST_RMS_TRIM_MAX_VRMS     (2.0f)
 #define BOOST_RMS_TRIM_ENABLE_VRMS  (0.5f)
 #define BOOST_RMS_TRIM_SOFTSTART_ERR_VRMS (0.05f)
 #define BOOST_RMS_TRIM_MOD_MARGIN   (0.02f)
@@ -114,9 +114,6 @@ typedef enum {
     BOOST_CAL_VOLTAGE = 1,
     BOOST_CAL_IOUT = 2,
     BOOST_CAL_IIN = 3,
-    BOOST_CAL_VOLTAGE_GAIN = 4,
-    BOOST_CAL_IOUT_GAIN = 5,
-    BOOST_CAL_IIN_GAIN = 6,
 } Boost_CalMode_t;
 
 typedef struct {
@@ -198,6 +195,7 @@ Boost_EditMode_t Boost_GetEditMode(void);
 Boost_RunState_t Boost_GetRunState(void);
 Boost_CalMode_t Boost_GetCalMode(void);
 float Boost_GetCalBias(void);
+float Boost_GetCalGain(void);
 float Boost_GetCalValue(void);
 
 #endif /* __BOOST_H */
